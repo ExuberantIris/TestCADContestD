@@ -6,6 +6,8 @@
 
 #include "../struct/flipflop.h"
 
+class FFRecord;
+
 class Path {
 public:
     std::pair<FlipFlop*, FlipFlop*> endpoints;
@@ -15,19 +17,22 @@ public:
     Path(FlipFlop* launch, FlipFlop* capture, float ff_d, float ss_d = 0.0f);
 };
 
-extern std::vector<FlipFlop*> ff_list;
-extern std::vector<Path> path_list;
-
-class FFAndPathRecord {
+class PathRecord {
 public:
-    FFAndPathRecord() = default;
+    explicit PathRecord(FFRecord& ff_record);
 
-    /* Parse FF_delay.rpt only; initialize ff_delay and create paths. */
+    PathRecord() = delete;
+
+    /* Parse FF_delay.rpt; endpoints reference ff_list built by GraphRecord. */
     bool load_ff_delay_rpt(const std::string& rpt_path);
     /* Parse SS_delay.rpt and update ss_delay for existing/generated paths. */
     bool load_ss_delay_rpt(const std::string& rpt_path);
     /* Convenience API to parse both reports. */
     bool load_delay_reports(const std::string& ff_rpt_path, const std::string& ss_rpt_path);
 
-    const std::vector<Path>& get_path_list() const;
+    [[nodiscard]] const std::vector<Path>& get_path_list() const;
+
+private:
+    FFRecord& ff_record_;
+    std::vector<Path> path_list_;
 };

@@ -45,9 +45,14 @@ endif()
 # Optional C++ utility target for buffer parsing
 add_library(problemd_utils
     utils/struct/buffer.cpp
+    utils/struct/flipflop.cpp
     utils/record/buffer_record.cpp
-    utils/record/ff_and_path_record.cpp
+    utils/record/ff_record.cpp
+    utils/record/path_record.cpp
     utils/record/graph_record.cpp
+    utils/record/record.cpp
+    utils/record/graphs/clock_vertex.cpp
+    utils/record/graphs/clock_edge.cpp
 )
 
 target_include_directories(problemd_utils PUBLIC
@@ -60,15 +65,18 @@ target_include_directories(problemd_utils PUBLIC
 add_executable(test_buffer_record unit_test/src/test_buffer_record.cpp)
 add_executable(test_ff_and_path_record unit_test/src/test_ff_and_path_record.cpp)
 add_executable(test_graph_record unit_test/src/test_graph_record.cpp)
+add_executable(test_record unit_test/src/test_record.cpp)
 
 target_link_libraries(test_buffer_record PRIVATE problemd_utils)
 target_link_libraries(test_ff_and_path_record PRIVATE problemd_utils)
 target_link_libraries(test_graph_record PRIVATE problemd_utils)
+target_link_libraries(test_record PRIVATE problemd_utils)
 
 enable_testing()
 add_test(NAME buffer_record_parse COMMAND test_buffer_record)
 add_test(NAME ff_and_path_record_parse COMMAND test_ff_and_path_record)
 add_test(NAME graph_record_parse COMMAND test_graph_record)
+add_test(NAME record_load_files COMMAND test_record)
 
 # Helpful status message
-message(STATUS "Targets: cadd_problem_d, problemd_utils, test_buffer_record, test_ff_and_path_record, test_graph_record")
+message(STATUS "Targets: cadd_problem_d, problemd_utils, test_buffer_record, test_ff_and_path_record, test_graph_record, test_record")

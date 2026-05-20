@@ -1,64 +1,10 @@
 #include "graph_record.h"
 
-#include "ff_and_path_record.h"
-
 #include <cstdio>
 #include <cstring>
 #include <string>
-#include <utility>
+#include <variant>
 #include <vector>
-
-BufferNode::BufferNode(std::vector<Buffer*> buffers)
-    : buffers(std::move(buffers)), ff_delay(0.f), ss_delay(0.f)
-{
-}
-
-float ClockTreeEdge::get_weight() const noexcept
-{
-    return 0.f;
-}
-
-BufferEdge::BufferEdge(float delay) : delay_(delay) {}
-
-float BufferEdge::get_weight() const noexcept
-{
-    return delay_;
-}
-
-PathEdge::PathEdge(float delay) : delay_(delay) {}
-
-float PathEdge::get_weight() const noexcept
-{
-    return delay_;
-}
-
-FlipFlopNode::FlipFlopNode() : id_(-1) {}
-
-FlipFlopNode::FlipFlopNode(int id, std::string name) : id_(id), name_(std::move(name)) {}
-
-int FlipFlopNode::id() const
-{
-    return id_;
-}
-
-const std::string& FlipFlopNode::name() const
-{
-    return name_;
-}
-
-static void ensure_ff_index(int id)
-{
-    if (id < 0)
-        return;
-
-    if (static_cast<int>(ff_list.size()) <= id)
-        ff_list.resize(static_cast<size_t>(id + 1), nullptr);
-
-    for (int i = 0; i <= id; ++i) {
-        if (!ff_list[static_cast<size_t>(i)])
-            ff_list[static_cast<size_t>(i)] = new FlipFlop(i);
-    }
-}
 
 static bool parse_ff_id(const char* name, int* id_out)
 {
@@ -89,7 +35,39 @@ static bool parse_structure_line(const char* line, int* level, char* name, char*
     return false;
 }
 
-bool GraphRecord::load_clk_tree(const std::string& structure_path)
+static void annotate_buffer_edge_delays(ClockTreeGraph& graph)
+{
+    for (const auto& [vid, _] : graph.get_vertices()) {
+        ClockVertex& vertex = graph.get_vertex(vid);
+        const auto& neighbors = graph.get_neighbors(vid);
+        int fanout = static_cast<int>(neighbors.size());
+        float edge_ff_delay = 0.f;
+        float edge_ss_delay = 0.f;
+
+        if (auto* buf_node = std::get_if<BufferNode>(&vertex)) {
+            if (fanout < 1)
+                fanout = 1;
+            const Buffer* buf = buf_node->buffers.empty() ? nullptr : buf_node->buffers[0];
+            if (buf) {
+                buf_node->ff_delay = buf->get_ff_delay(fanout);
+                buf_node->ss_delay = buf->get_ss_delay(fanout);
+                edge_ff_delay = buf_node->ff_delay;
+                edge_ss_delay = buf_node->ss_delay;
+            }
+        }
+
+        for (graaf::vertex_id_t child : neighbors) {
+            if (!graph.has_edge(vid, child))
+                continue;
+            ClockEdge& edge = graph.get_edge(vid, child);
+            if (std::holds_alternative<BufferEdge>(edge))
+                std::get<BufferEdge>(edge) = BufferEdge{edge_ff_delay, edge_ss_delay};
+        }
+    }
+}
+
+bool GraphRecord::load_clk_tree(const std::string& structure_path,
+                                const BufferRecord& buffer_record)
 {
     FILE* fp = std::fopen(structure_path.c_str(), "r");
     if (!fp)
@@ -109,7 +87,7 @@ bool GraphRecord::load_clk_tree(const std::string& structure_path)
             continue;
 
         if (std::strncmp(p, "Root:", 5) == 0) {
-            const graaf::vertex_id_t root_id = clock_tree_.add_vertex(ClockVertex{Nothing{}});
+            const graaf::vertex_id_t root_id = clock_tree_.add_vertex(Nothing{});
             stack.push_back(root_id);
             root_done = 1;
             continue;
@@ -136,25 +114,47 @@ bool GraphRecord::load_clk_tree(const std::string& structure_path)
         graaf::vertex_id_t node_id;
 
         if (parse_ff_id(name, &ff_id)) {
-            ensure_ff_index(ff_id);
-            node_id = clock_tree_.add_vertex(ClockVertex{FlipFlopNode{ff_id, name}});
-            clock_tree_.add_edge(parent_id, node_id, BufferEdge{0.f});
+            FlipFlop* ff = ff_record_.ensure(ff_id);
+            node_id = clock_tree_.add_vertex(FlipFlopNode{ff_id, name});
+            if (ff) {
+                auto& node = std::get<FlipFlopNode>(clock_tree_.get_vertex(node_id));
+                ff->set_graph_node(&node);
+            }
+            clock_tree_.add_edge(parent_id, node_id, BufferEdge{});
         } else if (is_buffer_name(name)) {
-            node_id = clock_tree_.add_vertex(ClockVertex{BufferNode{std::vector<Buffer*>{}}});
-            clock_tree_.add_edge(parent_id, node_id, BufferEdge{0.f});
+            std::vector<Buffer*> bufs;
+            if (const Buffer* buf = buffer_record.find_by_name(cell))
+                bufs.push_back(const_cast<Buffer*>(buf));
+            node_id = clock_tree_.add_vertex(BufferNode{std::move(bufs)});
+            clock_tree_.add_edge(parent_id, node_id, BufferEdge{});
         } else {
-            node_id = clock_tree_.add_vertex(ClockVertex{Nothing{}});
-            clock_tree_.add_edge(parent_id, node_id, BufferEdge{0.f});
+            node_id = clock_tree_.add_vertex(Nothing{});
+            clock_tree_.add_edge(parent_id, node_id, BufferEdge{});
         }
 
         stack.push_back(node_id);
     }
 
     std::fclose(fp);
-    return root_done && clock_tree_.vertex_count() > 0;
+
+    if (!root_done || clock_tree_.vertex_count() == 0)
+        return false;
+
+    annotate_buffer_edge_delays(clock_tree_);
+    return true;
 }
 
 const ClockTreeGraph& GraphRecord::get_clock_tree() const
 {
     return clock_tree_;
+}
+
+const FFRecord& GraphRecord::get_ff_record() const
+{
+    return ff_record_;
+}
+
+FFRecord& GraphRecord::get_ff_record()
+{
+    return ff_record_;
 }

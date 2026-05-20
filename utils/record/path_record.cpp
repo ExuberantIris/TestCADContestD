@@ -1,4 +1,6 @@
-#include "ff_and_path_record.h"
+#include "path_record.h"
+
+#include "ff_record.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -6,29 +8,12 @@
 #include <string>
 #include <unordered_map>
 
-std::vector<FlipFlop*> ff_list;
-std::vector<Path> path_list;
-
 Path::Path(FlipFlop* launch, FlipFlop* capture, float ff_d, float ss_d)
     : endpoints(launch, capture), ff_delay(ff_d), ss_delay(ss_d)
 {
 }
 
-static FlipFlop* find_or_create_ff(int id)
-{
-    if (id < 0)
-        return nullptr;
-
-    if (static_cast<int>(ff_list.size()) <= id)
-        ff_list.resize(static_cast<size_t>(id + 1), nullptr);
-
-    for (int i = 0; i <= id; ++i) {
-        if (!ff_list[static_cast<size_t>(i)])
-            ff_list[static_cast<size_t>(i)] = new FlipFlop(i);
-    }
-
-    return ff_list[static_cast<size_t>(id)];
-}
+PathRecord::PathRecord(FFRecord& ff_record) : ff_record_(ff_record) {}
 
 static bool parse_path_line(const char* line, int* launch_id, int* capture_id, float* delay)
 {
@@ -58,7 +43,23 @@ static std::uint64_t make_key(int launch_id, int capture_id)
            static_cast<std::uint32_t>(capture_id);
 }
 
-bool FFAndPathRecord::load_ff_delay_rpt(const std::string& rpt_path)
+static void clear_ff_paths(FFRecord& ff_record)
+{
+    for (FlipFlop* ff : ff_record.get_ff_list()) {
+        if (ff)
+            ff->clear_paths();
+    }
+}
+
+static void register_path_on_ffs(Path& path)
+{
+    if (path.endpoints.first)
+        path.endpoints.first->add_path_from(&path);
+    if (path.endpoints.second)
+        path.endpoints.second->add_path_to(&path);
+}
+
+bool PathRecord::load_ff_delay_rpt(const std::string& rpt_path)
 {
     FILE* fp = std::fopen(rpt_path.c_str(), "r");
     char line[4096];
@@ -66,7 +67,8 @@ bool FFAndPathRecord::load_ff_delay_rpt(const std::string& rpt_path)
     if (!fp)
         return false;
 
-    path_list.clear();
+    clear_ff_paths(ff_record_);
+    path_list_.clear();
 
     while (std::fgets(line, static_cast<int>(sizeof(line)), fp)) {
         int launch_id;
@@ -74,22 +76,24 @@ bool FFAndPathRecord::load_ff_delay_rpt(const std::string& rpt_path)
         float delay;
 
         if (parse_path_line(line, &launch_id, &capture_id, &delay)) {
-            FlipFlop* launch_ff = find_or_create_ff(launch_id);
-            FlipFlop* capture_ff = find_or_create_ff(capture_id);
-            path_list.emplace_back(launch_ff, capture_ff, delay, 0.0f);
+            FlipFlop* launch_ff = ff_record_.lookup(launch_id);
+            FlipFlop* capture_ff = ff_record_.lookup(capture_id);
+            if (!launch_ff || !capture_ff)
+                continue;
+            path_list_.emplace_back(launch_ff, capture_ff, delay, 0.0f);
         }
     }
 
     std::fclose(fp);
-    return !path_list.empty();
+    return !path_list_.empty();
 }
 
-const std::vector<Path>& FFAndPathRecord::get_path_list() const
+const std::vector<Path>& PathRecord::get_path_list() const
 {
-    return path_list;
+    return path_list_;
 }
 
-bool FFAndPathRecord::load_ss_delay_rpt(const std::string& rpt_path)
+bool PathRecord::load_ss_delay_rpt(const std::string& rpt_path)
 {
     FILE* fp = std::fopen(rpt_path.c_str(), "r");
     char line[4096];
@@ -98,11 +102,11 @@ bool FFAndPathRecord::load_ss_delay_rpt(const std::string& rpt_path)
     if (!fp)
         return false;
 
-    for (size_t i = 0; i < path_list.size(); ++i) {
-        const Path& p = path_list[i];
+    for (size_t i = 0; i < path_list_.size(); ++i) {
+        const Path& p = path_list_[i];
         if (!p.endpoints.first || !p.endpoints.second)
             continue;
-        path_idx[make_key(*p.endpoints.first, *p.endpoints.second)] = i;
+        path_idx[make_key(p.endpoints.first->id(), p.endpoints.second->id())] = i;
     }
 
     while (std::fgets(line, static_cast<int>(sizeof(line)), fp)) {
@@ -113,26 +117,37 @@ bool FFAndPathRecord::load_ss_delay_rpt(const std::string& rpt_path)
         if (!parse_path_line(line, &launch_id, &capture_id, &delay))
             continue;
 
-        FlipFlop* launch_ff = find_or_create_ff(launch_id);
-        FlipFlop* capture_ff = find_or_create_ff(capture_id);
+        FlipFlop* launch_ff = ff_record_.lookup(launch_id);
+        FlipFlop* capture_ff = ff_record_.lookup(capture_id);
+        if (!launch_ff || !capture_ff)
+            continue;
         const auto key = make_key(launch_id, capture_id);
         const auto it = path_idx.find(key);
 
         if (it != path_idx.end()) {
-            path_list[it->second].ss_delay = delay;
+            path_list_[it->second].ss_delay = delay;
         } else {
-            path_list.emplace_back(launch_ff, capture_ff, 0.0f, delay);
-            path_idx[key] = path_list.size() - 1;
+            path_list_.emplace_back(launch_ff, capture_ff, 0.0f, delay);
+            path_idx[key] = path_list_.size() - 1;
         }
     }
 
     std::fclose(fp);
-    return !path_list.empty();
+    return !path_list_.empty();
 }
 
-bool FFAndPathRecord::load_delay_reports(const std::string& ff_rpt_path, const std::string& ss_rpt_path)
+static void register_all_paths(std::vector<Path>& path_list)
+{
+    for (Path& path : path_list)
+        register_path_on_ffs(path);
+}
+
+bool PathRecord::load_delay_reports(const std::string& ff_rpt_path, const std::string& ss_rpt_path)
 {
     if (!load_ff_delay_rpt(ff_rpt_path))
         return false;
-    return load_ss_delay_rpt(ss_rpt_path);
+    if (!load_ss_delay_rpt(ss_rpt_path))
+        return false;
+    register_all_paths(path_list_);
+    return true;
 }
