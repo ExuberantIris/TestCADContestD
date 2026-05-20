@@ -1,0 +1,3 @@
+[submodule "lib/graaf"]
+	path = lib/graaf
+	url = https://github.com/bobluppes/graaf.git
