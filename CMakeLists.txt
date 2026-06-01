@@ -13,32 +13,27 @@ if(CMAKE_BUILD_TYPE STREQUAL "")
     set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
 endif()
 
-set(PROBLEMD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../ProblemD")
-
 set(PD_SOURCES
-    ${PROBLEMD_DIR}/src/pd_parser.c
-    ${PROBLEMD_DIR}/src/pd_util.c
-    ${PROBLEMD_DIR}/src/pd_clock.c
-    ${PROBLEMD_DIR}/src/pd_timing.c
-    ${PROBLEMD_DIR}/src/pd_output.c
+    src/pd_parser.c
+    src/pd_util.c
+    src/pd_clock.c
+    src/pd_timing.c
+    src/pd_output.c
 )
 
-set(LP_SOURCES
-    src/main.cpp
+set(LP_CORE_SOURCES
     src/lp_branch.cpp
     src/lp_score.cpp
     src/lp_solve.cpp
     src/lp_solve_pg.cpp
     src/lp_solve_glpk.cpp
     src/lp_apply.cpp
+    src/lp_buffer_dp.cpp
 )
 
-add_executable(lp_solver ${PD_SOURCES} ${LP_SOURCES})
+add_executable(lp_solver ${PD_SOURCES} src/main.cpp ${LP_CORE_SOURCES})
 
-target_include_directories(lp_solver PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${PROBLEMD_DIR}/include
-)
+target_include_directories(lp_solver PRIVATE include)
 
 target_compile_options(lp_solver PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra>
@@ -57,4 +52,23 @@ if(USE_VENDORED_GLPK)
     target_link_libraries(lp_solver PRIVATE "${GLPK_INSTALL}/lib/libglpk.a")
 endif()
 
-message(STATUS "ProblemD_lp: lp_solver (C++17 + Phase0 C)")
+add_executable(test_buffer_chain_dp
+    ${PD_SOURCES}
+    unittest/test_buffer_chain_dp.cpp
+    src/lp_branch.cpp
+    src/lp_buffer_dp.cpp
+)
+target_include_directories(test_buffer_chain_dp PRIVATE include)
+target_compile_options(test_buffer_chain_dp PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra>
+    $<$<COMPILE_LANGUAGE:C>:-Wall -Wextra>
+)
+if(UNIX)
+    target_link_libraries(test_buffer_chain_dp PRIVATE m)
+endif()
+
+enable_testing()
+add_test(NAME buffer_chain_dp_testcase1 COMMAND test_buffer_chain_dp
+    ${CMAKE_CURRENT_SOURCE_DIR}/testcase/testcase1)
+
+message(STATUS "ProblemD: lp_solver, test_buffer_chain_dp (C++17 + Phase0 C)")

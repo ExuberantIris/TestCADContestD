@@ -19,6 +19,13 @@ Run testcase0:
   # or:
   ./lp_solver testcase/testcase0 result/testcase0
 
+Run testcase1–4:
+  bash scripts/run_testcases_1_4.sh
+
+Buffer-chain DP unittest (testcase1: print DP + run lp_solver):
+  make unittest
+  ./test_buffer_chain_dp testcase/testcase1
+
 Environment:
   LP_TIME_LIMIT=570   # seconds (default 9.5 min)
 

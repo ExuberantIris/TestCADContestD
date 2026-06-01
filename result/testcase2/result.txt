@@ -1,0 +1,17 @@
+lp_solver result
+testcase_dir: testcase/testcase2
+time_limit_sec: 570.0
+solver: projected_gradient
+solver_status: 0
+
+=== baseline (ori) ===
+SS setup WNS : -0.302000  TNS : -98.697600
+FF hold  WNS : -0.029800  TNS : -0.103400
+Total area   : 980.414032
+Score (a=b=g=1): 0.000000
+
+=== after LP ===
+SS setup WNS : -0.302000  TNS : -98.697600
+FF hold  WNS : -0.029800  TNS : -0.103400
+Total area   : 980.414032
+Score (a=b=g=1): 0.000000
