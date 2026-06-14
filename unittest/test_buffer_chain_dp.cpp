@@ -67,20 +67,24 @@ int main(int argc, char **argv)
         std::cout << "  (unreachable at this delay)\n";
     }
 
-    std::cout << "\n=== run lp_solver on same testcase ===\n";
+    std::cout << "\n=== run sa_solver on same testcase ===\n";
     std::cout.flush();
 
     const std::string result_dir = "result/testcase1_unittest";
     mkdir(result_dir.c_str(), 0755);
-    std::string cmd = "./lp_solver \"" + testcase_dir + "\" \"" + result_dir + "\"";
-    const char *limit = std::getenv("LP_TIME_LIMIT");
+    std::string cmd = "./sa_solver \"" + testcase_dir + "\" \"" + result_dir + "\"";
+    const char *limit = std::getenv("SA_TIME_LIMIT");
     if (!limit || !limit[0])
-        cmd = "LP_TIME_LIMIT=60 " + cmd;
+        limit = std::getenv("LP_TIME_LIMIT");
+    if (!limit || !limit[0])
+        cmd = "SA_TIME_LIMIT=60 " + cmd;
+    else
+        cmd = std::string("SA_TIME_LIMIT=") + limit + " " + cmd;
 
     std::cout << "command: " << cmd << "\n\n";
     const int rc = std::system(cmd.c_str());
     if (rc != 0) {
-        std::cerr << "lp_solver exited with status " << rc << "\n";
+        std::cerr << "sa_solver exited with status " << rc << "\n";
         pd_free_design(&design);
         return 3;
     }

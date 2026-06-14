@@ -1,0 +1,10 @@
+# Timing at x0 (design delays, before LP iterations)
+
+wns_ss_x0: -0.285800000
+tns_ss_x0: -35.767100000
+wns_ff_x0: 0.012400000
+tns_ff_x0: 0.000000000
+area_proxy_x0: 422.990656000
+score_x0: 0.051736303
+violating_paths_ss: 814
+violating_paths_ff: 0

@@ -1,8 +1,14 @@
-lp_solver result
+sa_solver_prime result
 testcase_dir: testcase/testcase2
-time_limit_sec: 570.0
-solver: projected_gradient
-solver_status: 0
+time_limit_sec: 600.0
+lp_init_sec: 30.015
+lp_init_ok: 1
+wall_elapsed_sec: 600.001
+sa_elapsed_sec: 569.750
+sa_iterations: 2193403
+use_second_best: 0
+solver: path_heap_sa(timed_out)
+solver_status: 2
 
 === baseline (ori) ===
 SS setup WNS : -0.302000  TNS : -98.697600
@@ -10,8 +16,8 @@ FF hold  WNS : -0.029800  TNS : -0.103400
 Total area   : 980.414032
 Score (a=b=g=1): 0.000000
 
-=== after LP ===
-SS setup WNS : -0.302000  TNS : -98.697600
-FF hold  WNS : -0.029800  TNS : -0.103400
-Total area   : 980.414032
-Score (a=b=g=1): 0.000000
+=== after optimize ===
+SS setup WNS : -0.381000  TNS : -74.219200
+FF hold  WNS : -0.075800  TNS : -0.429500
+Total area   : 575.108032
+Score (a=b=g=1): -4.297568

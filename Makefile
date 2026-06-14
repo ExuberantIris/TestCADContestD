@@ -11,29 +11,35 @@ PD_SRCS = $(PD_DIR)/src/pd_parser.c \
           $(PD_DIR)/src/pd_timing.c \
           $(PD_DIR)/src/pd_output.c
 
-LP_SRCS = src/main.cpp \
+SA_SRCS = src/main.cpp \
           src/lp_branch.cpp \
           src/lp_score.cpp \
-          src/lp_solve.cpp \
-          src/lp_solve_pg.cpp \
-          src/lp_solve_glpk.cpp \
-          src/lp_apply.cpp \
-          src/lp_buffer_dp.cpp
+          src/lp_buffer_dp.cpp \
+          src/lp_mo_init.cpp \
+          src/sa_eval.cpp \
+          src/sa_path_solve.cpp \
+          src/sa_apply.cpp
 
 PD_OBJS = $(PD_SRCS:.c=.lp.o)
-LP_OBJS = $(LP_SRCS:.cpp=.o)
+SA_OBJS = $(SA_SRCS:.cpp=.o)
 
 UNITTEST_SRCS = unittest/test_buffer_chain_dp.cpp
 UNITTEST_OBJS = $(UNITTEST_SRCS:.cpp=.o)
 
-.PHONY: all clean unittest
+PRINT_LP_SRCS = tools/print_lp_input.cpp src/lp_print_input.cpp
+PRINT_LP_OBJS = tools/print_lp_input.o src/lp_print_input.o
 
-all: lp_solver
+.PHONY: all clean unittest print_lp_input
 
-lp_solver: $(PD_OBJS) $(LP_OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ $(PD_OBJS) $(LP_OBJS) $(LDFLAGS)
+all: sa_solver
 
-unittest: lp_solver $(UNITTEST_OBJS)
+print_lp_input: $(PD_OBJS) $(PRINT_LP_OBJS) src/lp_branch.o src/lp_score.o src/lp_buffer_dp.o src/sa_eval.o
+	$(CXX) $(CXXFLAGS) -o $@ $(PD_OBJS) $(PRINT_LP_OBJS) src/lp_branch.o src/lp_score.o src/lp_buffer_dp.o src/sa_eval.o $(LDFLAGS)
+
+sa_solver: $(PD_OBJS) $(SA_OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $(PD_OBJS) $(SA_OBJS) $(LDFLAGS)
+
+unittest: sa_solver $(UNITTEST_OBJS)
 	$(CXX) $(CXXFLAGS) -o test_buffer_chain_dp $(PD_OBJS) $(UNITTEST_OBJS) src/lp_branch.o src/lp_buffer_dp.o $(LDFLAGS)
 
 $(PD_DIR)/src/%.lp.o: $(PD_DIR)/src/%.c
@@ -42,8 +48,11 @@ $(PD_DIR)/src/%.lp.o: $(PD_DIR)/src/%.c
 src/%.o: src/%.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
+tools/%.o: tools/%.cpp
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
 unittest/%.o: unittest/%.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(PD_OBJS) $(LP_OBJS) $(UNITTEST_OBJS) lp_solver test_buffer_chain_dp
+	rm -f $(PD_OBJS) $(SA_OBJS) $(UNITTEST_OBJS) $(PRINT_LP_OBJS) sa_solver test_buffer_chain_dp print_lp_input

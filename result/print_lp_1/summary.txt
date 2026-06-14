@@ -1,0 +1,20 @@
+# mo_projected_gradient LP input (ProblemD_SA_prime)
+# Variables: per branch b — d_ss[b], d_ff[b]
+# Constraints: box bounds per branch (project each iter)
+# Objective: minimize violations of WNS/TNS for SS setup and FF hold
+
+n_branches: 2173
+n_ff: 1502
+n_paths: 4506
+clock_period: 0.300000000
+t_setup: 0.024000000
+t_hold: 0.015000000
+wns_ss_ori: -0.284800000
+tns_ss_ori: -37.858700000
+wns_ff_ori: 0.013600000
+tns_ff_ori: 0.000000000
+area_ori: 422.990656000
+solver: mo_projected_gradient
+step: 0.004
+eps: 1e-6
+default_lp_init_time_limit_sec: 30

@@ -31,7 +31,7 @@ double LpBufferChainDp::cell_area(const PdCell *c) const
     return c->width * c->height;
 }
 
-int LpBufferChainDp::build(const PdDesign *d, LpBufferDpCorner corner)
+int LpBufferChainDp::build(const PdDesign *d, LpBufferDpCorner corner, double max_delay)
 {
     design_ = d;
     max_fanout_ = 1;
@@ -41,9 +41,14 @@ int LpBufferChainDp::build(const PdDesign *d, LpBufferDpCorner corner)
     prefix_.clear();
     prefix_[0] = LpBufferChainEntry{0.0, 0.0, {}, true};
 
-    const Key max_k = delay_key(kMaxDelay);
+    if (max_delay <= 0.0)
+        max_delay = kMaxDelay;
+    max_delay = std::min(max_delay, kMaxDelay);
+    const Key max_k = delay_key(max_delay);
     bool changed = true;
-    while (changed) {
+    int rounds = 0;
+    while (changed && rounds < 64) {
+        rounds++;
         changed = false;
         const auto snapshot = prefix_;
         for (const auto &kv : snapshot) {

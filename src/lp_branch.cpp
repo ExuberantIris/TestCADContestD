@@ -9,7 +9,7 @@ void LpProblem::clear()
     ff_node_ids.clear();
     path_ids.clear();
     wns_ss_ori = tns_ss_ori = wns_ff_ori = tns_ff_ori = area_ori = 0.0;
-    time_limit_sec = 570.0;
+    time_limit_sec = 600.0;
 }
 
 void LpSolution::clear()
@@ -98,8 +98,10 @@ static void add_branch(LpProblem *pb, int parent, int child, LpBranchKind kind, 
 
 int lp_build_from_design(LpProblem *pb, PdDesign *d, char *err, std::size_t err_sz)
 {
+    const double saved_time_limit = pb->time_limit_sec;
     lp_problem_free(pb);
     lp_problem_init(pb);
+    pb->time_limit_sec = saved_time_limit;
 
     for (int i = 0; i < d->n_nodes; i++) {
         const PdNode *n = &d->nodes[i];

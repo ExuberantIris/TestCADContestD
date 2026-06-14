@@ -1,15 +1,23 @@
-#include "lp_apply.hpp"
+#include "lp_buffer_dp.hpp"
+#include "lp_mo_init.hpp"
 #include "lp_score.hpp"
-#include "lp_solve.hpp"
 #include "lp_types.hpp"
+#include "sa_apply.hpp"
+#include "sa_eval.hpp"
+#include "sa_path_solve.hpp"
+#include "sa_solve.hpp"
 
+#include <chrono>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <sys/stat.h>
 
 static void read_time_limit(LpProblem *pb)
 {
-    const char *env = std::getenv("LP_TIME_LIMIT");
+    const char *env = std::getenv("SA_TIME_LIMIT");
+    if (!env || !env[0])
+        env = std::getenv("LP_TIME_LIMIT");
     if (env && env[0]) {
         const double t = std::atof(env);
         if (t > 0.1)
@@ -17,28 +25,60 @@ static void read_time_limit(LpProblem *pb)
     }
 }
 
+static double read_lp_init_limit()
+{
+    const char *env = std::getenv("LP_INIT_TIME_LIMIT");
+    if (env && env[0]) {
+        const double t = std::atof(env);
+        if (t > 0.1)
+            return t;
+    }
+    return 30.0;
+}
+
+static double read_sa_phase_limit()
+{
+    const char *env = std::getenv("SA_PHASE_TIME_LIMIT");
+    if (env && env[0]) {
+        const double t = std::atof(env);
+        if (t > 0.1)
+            return t;
+    }
+    return 510.0; /* 8 min 30 sec */
+}
+
 int main(int argc, char **argv)
 {
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
     PdDesign design{};
     LpProblem problem;
-    LpSolution solution;
+    SaSolveResult sa_result{};
+    LpSolution lp_init{};
     LpMetrics ori{}, opt{};
+    LpBufferChainDp dp_ss, dp_ff;
     char err[512];
     const char *testcase_dir;
+    const auto wall_t0 = std::chrono::steady_clock::now();
 
     if (argc < 2) {
         std::fprintf(stderr, "Usage: %s <testcase_dir> [result_dir]\n", argv[0]);
-        std::fprintf(stderr, "  result_dir: writes result.txt and modified_clk_tree.structure\n");
         return 1;
     }
 
     testcase_dir = argv[1];
     lp_problem_init(&problem);
     read_time_limit(&problem);
+    if (problem.time_limit_sec <= 0.0)
+        problem.time_limit_sec = 600.0;
 
-    std::printf("=== lp_solver ===\n");
+    const double total_limit = problem.time_limit_sec;
+    const double lp_init_limit = read_lp_init_limit();
+    const double sa_phase_limit = read_sa_phase_limit();
+
+    std::printf("=== sa_solver (ProblemD_SA_prime) ===\n");
     std::printf("Input folder: %s\n", testcase_dir);
-    std::printf("Time limit  : %.1f sec\n", problem.time_limit_sec);
+    std::printf("Total limit : %.1f sec | LP init: %.1f sec | SA phase: %.1f sec\n", total_limit,
+                lp_init_limit, sa_phase_limit);
 
     if (pd_load_design(testcase_dir, &design, err, sizeof(err)) != 0) {
         std::fprintf(stderr, "Load failed: %s\n", err);
@@ -46,7 +86,22 @@ int main(int argc, char **argv)
     }
 
     if (lp_build_from_design(&problem, &design, err, sizeof(err)) != 0) {
-        std::fprintf(stderr, "LP build failed: %s\n", err);
+        std::fprintf(stderr, "Problem build failed: %s\n", err);
+        pd_free_design(&design);
+        return 1;
+    }
+
+    double dp_max_delay = 0.0;
+    for (const LpBranch &br : problem.branches) {
+        dp_max_delay = std::max(dp_max_delay, br.d_ss_max);
+        dp_max_delay = std::max(dp_max_delay, br.d_ff_max);
+    }
+    dp_max_delay = std::min(LpBufferChainDp::kMaxDelay, dp_max_delay + 0.02);
+    std::printf("DP max delay: %.4f\n", dp_max_delay);
+
+    if (dp_ss.build(&design, LpBufferDpCorner::SS, dp_max_delay) != 0 ||
+        dp_ff.build(&design, LpBufferDpCorner::FF, dp_max_delay) != 0) {
+        std::fprintf(stderr, "DP table build failed\n");
         pd_free_design(&design);
         return 1;
     }
@@ -56,25 +111,44 @@ int main(int argc, char **argv)
                                  ori.area, problem.wns_ss_ori, problem.tns_ss_ori, problem.wns_ff_ori,
                                  problem.tns_ff_ori, problem.area_ori);
     lp_print_metrics("baseline (ori)", &ori);
-    std::printf("(ori reference) WNS_SS=%.6f TNS_SS=%.6f WNS_FF=%.6f TNS_FF=%.6f Area=%.6f\n",
-                problem.wns_ss_ori, problem.tns_ss_ori, problem.wns_ff_ori, problem.tns_ff_ori,
-                problem.area_ori);
 
-    std::printf("Branches: %zu  FF: %zu  Paths: %zu\n", problem.branches.size(),
-                problem.ff_node_ids.size(), problem.path_ids.size());
+    std::vector<BranchDpOpts> opts;
+    sa_build_branch_opts(&problem, &design, &opts);
+    LpSolution initial;
+    sa_init_from_design(&problem, &design, opts, &initial.d_ss, &initial.d_ff);
 
-    if (lp_solve(&problem, &design, &solution, err, sizeof(err)) != 0) {
-        std::fprintf(stderr, "Solve failed: %s\n", err);
+    const auto lp_t0 = std::chrono::steady_clock::now();
+    if (lp_solve_mo_init(&problem, &design, &lp_init, lp_init_limit, err, sizeof(err)) == 0 &&
+        !lp_init.d_ss.empty()) {
+        initial.d_ss = lp_init.d_ss;
+        initial.d_ff = lp_init.d_ff;
+        sa_result.lp_init_ok = 1;
+        std::printf("LP init: %s (status=%d)\n", lp_init.solver_name.c_str(), lp_init.status);
+    } else {
+        sa_result.lp_init_ok = 0;
+        std::printf("LP init: skipped/failed, using original clock tree delays\n");
+    }
+    sa_result.lp_init_sec =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - lp_t0).count();
+
+    if (sa_path_solve(&problem, &design, &dp_ss, &dp_ff, &initial, sa_phase_limit, &sa_result, err,
+                      sizeof(err)) != 0) {
+        std::fprintf(stderr, "SA failed: %s\n", err);
+        sa_solution_free(&sa_result);
         lp_problem_free(&problem);
         pd_free_design(&design);
         return 1;
     }
 
-    std::printf("Solver: %s (status=%d)\n", solution.solver_name.c_str(), solution.status);
+    std::printf("Solver: %s (status=%d, iter=%lld, lp=%.1fs, sa=%.1fs)\n",
+                sa_result.solution.solver_name.c_str(), sa_result.solution.status,
+                static_cast<long long>(sa_result.iterations), sa_result.lp_init_sec,
+                sa_result.elapsed_sec);
 
-    if (lp_apply_solution(&design, &problem, &solution, err, sizeof(err)) != 0) {
+    if (sa_apply_solution(&design, &problem, &sa_result.solution, &dp_ss, &dp_ff, err,
+                          sizeof(err)) != 0) {
         std::fprintf(stderr, "Apply failed: %s\n", err);
-        lp_solution_free(&solution);
+        sa_solution_free(&sa_result);
         lp_problem_free(&problem);
         pd_free_design(&design);
         return 1;
@@ -84,13 +158,20 @@ int main(int argc, char **argv)
     opt.score = lp_compute_score(opt.wns_setup_ss, opt.tns_setup_ss, opt.wns_hold_ff, opt.tns_hold_ff,
                                  opt.area, problem.wns_ss_ori, problem.tns_ss_ori, problem.wns_ff_ori,
                                  problem.tns_ff_ori, problem.area_ori);
-    lp_print_metrics("after LP", &opt);
+    lp_print_metrics("after optimize", &opt);
+
+    const double wall_elapsed =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - wall_t0).count();
 
     if (argc >= 3) {
         char struct_path[1024];
+        mkdir(argv[2], 0755);
 
-        if (lp_write_result_txt(argv[2], testcase_dir, &ori, &opt, solution.solver_name.c_str(),
-                                solution.status, problem.time_limit_sec, err, sizeof(err)) != 0) {
+        if (lp_write_result_txt(argv[2], testcase_dir, &ori, &opt, sa_result.solution.solver_name.c_str(),
+                                sa_result.solution.status, total_limit, sa_phase_limit,
+                                sa_result.lp_init_sec, sa_result.lp_init_ok, sa_result.elapsed_sec,
+                                wall_elapsed, sa_result.iterations, sa_result.use_second_best, err,
+                                sizeof(err)) != 0) {
             std::fprintf(stderr, "Write result.txt failed: %s\n", err);
         } else {
             char result_txt[1024];
@@ -108,7 +189,7 @@ int main(int argc, char **argv)
         }
     }
 
-    lp_solution_free(&solution);
+    sa_solution_free(&sa_result);
     lp_problem_free(&problem);
     pd_free_design(&design);
     return 0;

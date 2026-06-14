@@ -1,0 +1,21 @@
+將ProblemD_SA_prime改成以SA為主的判斷方式：
+首先，先使用LP, 限時30秒, 完成一個初始的解
+這個LP會將目前所有buffer設一個變數delay
+delay必須大於該fanout的buffer可以擁有的delay最小值
+這個LP是Multi Objective是減少TNS跟WNS，setup或hold都是
+這個30秒的解會是SA的初始變數
+如果30秒沒有建好則使用一開始的clock tree作為SA的初始變數
+
+接著，進行SA的計算
+建造一個最小堆，裡面裝各個path，weight=該path的setup hold Negative Slack
+每次疊代從中抽出10個最差跟10個隨機的path，使用SA挑選一個
+之後挑選一個可以影響到該path的buffer或空分岔處，修改其delay或加一個buffer(必須要大於該fanout的buffer可以擁有的delay最小值)
+你可以使用某種heuristic挑選該path
+如此重複一定次數後，再將delay轉乘buffer
+
+之後使用testcase 1跟testcase 2來測試
+將結果放在result中
+這兩個測試都要限時10分鐘
+超時就算做失敗
+
+將詳細的架構寫在ProblemD_SA_prime/architect.md中

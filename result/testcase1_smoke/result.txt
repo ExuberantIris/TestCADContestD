@@ -1,0 +1,23 @@
+sa_solver_prime result
+testcase_dir: testcase/testcase1
+time_limit_sec: 30.0
+lp_init_sec: 5.002
+lp_init_ok: 1
+wall_elapsed_sec: 30.000
+sa_elapsed_sec: 24.954
+sa_iterations: 366173
+use_second_best: 0
+solver: path_heap_sa(timed_out)
+solver_status: 2
+
+=== baseline (ori) ===
+SS setup WNS : -0.284800  TNS : -37.858700
+FF hold  WNS : 0.013600  TNS : 0.000000
+Total area   : 422.990656
+Score (a=b=g=1): 0.000000
+
+=== after optimize ===
+SS setup WNS : -0.152400  TNS : -18.063300
+FF hold  WNS : 0.042300  TNS : 0.000000
+Total area   : 546.932056
+Score (a=b=g=1): 0.694751
