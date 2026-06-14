@@ -20,7 +20,8 @@ double lp_compute_score(double wns_ss, double tns_ss, double wns_ff, double tns_
 void lp_print_metrics(const char *label, const LpMetrics *m);
 
 int lp_write_result_txt(const char *result_dir, const char *testcase_dir, const LpMetrics *ori,
-                        const LpMetrics *opt, const char *solver_name, int solver_status,
-                        double time_limit_sec, double sa_phase_limit_sec, double lp_init_sec,
-                        int lp_init_ok, double sa_elapsed_sec, double wall_elapsed_sec,
-                        long long sa_iterations, int use_second_best, char *err, std::size_t err_sz);
+                        const LpMetrics *lp_init, const LpMetrics *opt, const char *solver_name,
+                        int solver_status, double time_limit_sec, double sa_phase_limit_sec,
+                        double lp_init_sec, int lp_init_ok, double sa_elapsed_sec,
+                        double wall_elapsed_sec, long long sa_iterations, int use_second_best,
+                        char *err, std::size_t err_sz);

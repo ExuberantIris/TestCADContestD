@@ -103,7 +103,8 @@ bool apply_path_move(int path_idx, const SaPgCtx &ctx, const std::vector<BranchD
 
 int sa_path_solve(LpProblem *pb, const PdDesign *d, const LpBufferChainDp *dp_ss,
                   const LpBufferChainDp *dp_ff, const LpSolution *initial, double sa_time_sec,
-                  SaSolveResult *out, char *err, std::size_t err_sz)
+                  SaSolveResult *out, const LpMetrics *lp_init_metrics, char *err,
+                  std::size_t err_sz)
 {
     if (!pb || !d || !dp_ss || !dp_ff || !initial || !out) {
         if (err && err_sz > 0)
@@ -204,9 +205,19 @@ int sa_path_solve(LpProblem *pb, const PdDesign *d, const LpBufferChainDp *dp_ss
         sa_eval_state(pb, d, trial_ss, trial_ff, dp_ss, dp_ff, &trial_ctx);
 
         const double delta = trial_ctx.score - old_score;
-        const bool accept =
-            delta > 0.0 ||
-            (temperature > 1e-9 && uni01(rng) < std::exp(delta / temperature));
+        bool accept = delta > 0.0 ||
+                      (temperature > 1e-9 && uni01(rng) < std::exp(delta / temperature));
+
+        /* LP-init reference + hold-protect guard: reject candidates that worsen
+           hold metrics compared to LP init, or that drop below LP-init score. */
+        if (lp_init_metrics) {
+            const double eps = 1e-9;
+            if (trial_ctx.wns_ff < lp_init_metrics->wns_hold_ff - eps ||
+                trial_ctx.tns_ff < lp_init_metrics->tns_hold_ff - eps)
+                accept = false;
+            else if (lp_init_metrics->score > 0.0 && trial_ctx.score < lp_init_metrics->score - eps)
+                accept = false;
+        }
 
         if (accept) {
             cur_ss = std::move(trial_ss);

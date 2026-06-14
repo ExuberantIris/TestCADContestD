@@ -63,10 +63,11 @@ void lp_print_metrics(const char *label, const LpMetrics *m)
 }
 
 int lp_write_result_txt(const char *result_dir, const char *testcase_dir, const LpMetrics *ori,
-                        const LpMetrics *opt, const char *solver_name, int solver_status,
-                        double time_limit_sec, double sa_phase_limit_sec, double lp_init_sec,
-                        int lp_init_ok, double sa_elapsed_sec, double wall_elapsed_sec,
-                        long long sa_iterations, int use_second_best, char *err, std::size_t err_sz)
+                        const LpMetrics *lp_init, const LpMetrics *opt, const char *solver_name,
+                        int solver_status, double time_limit_sec, double sa_phase_limit_sec,
+                        double lp_init_sec, int lp_init_ok, double sa_elapsed_sec,
+                        double wall_elapsed_sec, long long sa_iterations, int use_second_best,
+                        char *err, std::size_t err_sz)
 {
     char path[1024];
     FILE *fp;
@@ -101,6 +102,19 @@ int lp_write_result_txt(const char *result_dir, const char *testcase_dir, const 
     std::fprintf(fp, "FF hold  WNS : %.6f  TNS : %.6f\n", ori->wns_hold_ff, ori->tns_hold_ff);
     std::fprintf(fp, "Total area   : %.6f\n", ori->area);
     std::fprintf(fp, "Score (a=b=g=1): %.6f\n\n", ori->score);
+
+    if (lp_init_ok) {
+        std::fprintf(fp, "=== after LP init ===\n");
+        std::fprintf(fp, "SS setup WNS : %.6f  TNS : %.6f\n", lp_init->wns_setup_ss,
+                        lp_init->tns_setup_ss);
+        std::fprintf(fp, "FF hold  WNS : %.6f  TNS : %.6f\n", lp_init->wns_hold_ff,
+                        lp_init->tns_hold_ff);
+        std::fprintf(fp, "Total area   : %.6f\n", lp_init->area);
+        std::fprintf(fp, "Score (a=b=g=1): %.6f\n\n", lp_init->score);
+    } else {
+        std::fprintf(fp, "=== after LP init ===\n");
+        std::fprintf(fp, "LP init skipped/failed (no metrics)\n\n");
+    }
 
     std::fprintf(fp, "=== after optimize ===\n");
     std::fprintf(fp, "SS setup WNS : %.6f  TNS : %.6f\n", opt->wns_setup_ss, opt->tns_setup_ss);

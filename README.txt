@@ -4,10 +4,14 @@ ProblemD_SA_prime — LP warm-start + path-heap SA
 See plan.txt and architect.md.
 
 Build:
-  cd ProblemD_SA_prime && make
+  make build
 
 Run:
   ./sa_solver <testcase_dir> [result_dir]
+  make                         # build and run every testcase into result/<testcase>
+  make TESTCASE=testcase1       # build and run one testcase into result/testcase1
+  make TC=testcase2             # same as TESTCASE=testcase2
+  make run-all                  # build and run every testcase
 
 Environment:
   SA_TIME_LIMIT=600        # total wall clock budget (reference)

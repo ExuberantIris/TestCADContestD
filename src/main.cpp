@@ -5,6 +5,7 @@
 #include "sa_apply.hpp"
 #include "sa_eval.hpp"
 #include "sa_path_solve.hpp"
+#include "greedy_postlp.hpp"
 #include "sa_solve.hpp"
 
 #include <chrono>
@@ -55,6 +56,7 @@ int main(int argc, char **argv)
     SaSolveResult sa_result{};
     LpSolution lp_init{};
     LpMetrics ori{}, opt{};
+    LpMetrics lp_init_metrics{};
     LpBufferChainDp dp_ss, dp_ff;
     char err[512];
     const char *testcase_dir;
@@ -124,6 +126,18 @@ int main(int argc, char **argv)
         initial.d_ff = lp_init.d_ff;
         sa_result.lp_init_ok = 1;
         std::printf("LP init: %s (status=%d)\n", lp_init.solver_name.c_str(), lp_init.status);
+        {
+            SaPgCtx lp_ctx;
+            if (sa_build_ctx(&problem, &design, &lp_ctx)) {
+                sa_eval_state(&problem, &design, lp_init.d_ss, lp_init.d_ff, &dp_ss, &dp_ff, &lp_ctx);
+                lp_init_metrics.wns_setup_ss = lp_ctx.wns_ss;
+                lp_init_metrics.tns_setup_ss = lp_ctx.tns_ss;
+                lp_init_metrics.wns_hold_ff = lp_ctx.wns_ff;
+                lp_init_metrics.tns_hold_ff = lp_ctx.tns_ff;
+                lp_init_metrics.area = lp_ctx.area;
+                lp_init_metrics.score = lp_ctx.score;
+            }
+        }
     } else {
         sa_result.lp_init_ok = 0;
         std::printf("LP init: skipped/failed, using original clock tree delays\n");
@@ -131,8 +145,19 @@ int main(int argc, char **argv)
     sa_result.lp_init_sec =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - lp_t0).count();
 
-    if (sa_path_solve(&problem, &design, &dp_ss, &dp_ff, &initial, sa_phase_limit, &sa_result, err,
-                      sizeof(err)) != 0) {
+    /* run greedy post-LP local search (hold-preserving) and write separate result */
+    if (sa_result.lp_init_ok) {
+        std::printf("Running greedy_post_lp (hold-preserving)...\n");
+        if (greedy_post_lp(argv[2], testcase_dir, &problem, &design, &dp_ss, &dp_ff,
+                           &lp_init, &lp_init_metrics, 30.0, err, sizeof(err)) == 0) {
+            std::printf("Wrote %s/result_postlp_greedy.txt\n", argv[2]);
+        } else {
+            std::fprintf(stderr, "Greedy post-LP failed: %s\n", err);
+        }
+    }
+
+    if (sa_path_solve(&problem, &design, &dp_ss, &dp_ff, &initial, sa_phase_limit, &sa_result,
+                      (sa_result.lp_init_ok ? &lp_init_metrics : nullptr), err, sizeof(err)) != 0) {
         std::fprintf(stderr, "SA failed: %s\n", err);
         sa_solution_free(&sa_result);
         lp_problem_free(&problem);
@@ -167,16 +192,36 @@ int main(int argc, char **argv)
         char struct_path[1024];
         mkdir(argv[2], 0755);
 
-        if (lp_write_result_txt(argv[2], testcase_dir, &ori, &opt, sa_result.solution.solver_name.c_str(),
-                                sa_result.solution.status, total_limit, sa_phase_limit,
-                                sa_result.lp_init_sec, sa_result.lp_init_ok, sa_result.elapsed_sec,
-                                wall_elapsed, sa_result.iterations, sa_result.use_second_best, err,
+        if (lp_write_result_txt(argv[2], testcase_dir, &ori, &lp_init_metrics, &opt,
+                                sa_result.solution.solver_name.c_str(), sa_result.solution.status,
+                                total_limit, sa_phase_limit, sa_result.lp_init_sec,
+                                sa_result.lp_init_ok, sa_result.elapsed_sec, wall_elapsed,
+                                sa_result.iterations, sa_result.use_second_best, err,
                                 sizeof(err)) != 0) {
             std::fprintf(stderr, "Write result.txt failed: %s\n", err);
         } else {
             char result_txt[1024];
             if (pd_join_path(result_txt, sizeof(result_txt), argv[2], "result.txt") == 0)
                 std::printf("Wrote %s\n", result_txt);
+            /* also write a tagged copy for guarded-SA runs */
+            char src[1024];
+            char dst[1024];
+            if (pd_join_path(src, sizeof(src), argv[2], "result.txt") == 0 &&
+                pd_join_path(dst, sizeof(dst), argv[2], "result_sa_guarded.txt") == 0) {
+                FILE *fs = std::fopen(src, "r");
+                if (fs) {
+                    FILE *fd = std::fopen(dst, "w");
+                    if (fd) {
+                        char buf[4096];
+                        size_t n;
+                        while ((n = std::fread(buf, 1, sizeof(buf), fs)) > 0)
+                            std::fwrite(buf, 1, n, fd);
+                        std::fclose(fd);
+                        std::printf("Wrote %s\n", dst);
+                    }
+                    std::fclose(fs);
+                }
+            }
         }
 
         if (pd_join_path(struct_path, sizeof(struct_path), argv[2],
