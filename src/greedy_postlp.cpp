@@ -82,7 +82,12 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
         for (int b = 0; b < n_br && elapsed_sec(t0) < time_limit_sec; b++) {
             const auto &o = opts[static_cast<std::size_t>(b)];
 
-            // try ss candidates
+            double best_delta = 0.0;
+            std::vector<double> best_ss = cur_ss;
+            std::vector<double> best_ff = cur_ff;
+            SaPgCtx best_ctx = ctx;
+
+            // evaluate all ss candidates and find best
             for (double cand : o.ss_delays) {
                 if (std::fabs(cand - cur_ss[static_cast<std::size_t>(b)]) < 1e-12)
                     continue;
@@ -103,19 +108,16 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
                     trial_ctx.tns_ff < lp_init_metrics->tns_hold_ff - eps)
                     continue;
 
-                if (trial_ctx.score > cur_score + 1e-12) {
-                    cur_ss = std::move(trial_ss);
-                    cur_ff = std::move(trial_ff);
-                    ctx = trial_ctx;
-                    cur_score = ctx.score;
-                    improved = true;
-                    break; // move to next branch
+                double delta = trial_ctx.score - cur_score;
+                if (delta > best_delta + 1e-12) {
+                    best_delta = delta;
+                    best_ss = std::move(trial_ss);
+                    best_ff = std::move(trial_ff);
+                    best_ctx = trial_ctx;
                 }
             }
-            if (improved)
-                continue;
 
-            // try ff candidates
+            // evaluate all ff candidates and find best
             for (double cand : o.ff_delays) {
                 if (std::fabs(cand - cur_ff[static_cast<std::size_t>(b)]) < 1e-12)
                     continue;
@@ -135,14 +137,22 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
                     trial_ctx.tns_ff < lp_init_metrics->tns_hold_ff - eps)
                     continue;
 
-                if (trial_ctx.score > cur_score + 1e-12) {
-                    cur_ss = std::move(trial_ss);
-                    cur_ff = std::move(trial_ff);
-                    ctx = trial_ctx;
-                    cur_score = ctx.score;
-                    improved = true;
-                    break;
+                double delta = trial_ctx.score - cur_score;
+                if (delta > best_delta + 1e-12) {
+                    best_delta = delta;
+                    best_ss = std::move(trial_ss);
+                    best_ff = std::move(trial_ff);
+                    best_ctx = trial_ctx;
                 }
+            }
+
+            // accept best move if found
+            if (best_delta > 1e-12) {
+                cur_ss = std::move(best_ss);
+                cur_ff = std::move(best_ff);
+                ctx = best_ctx;
+                cur_score = ctx.score;
+                improved = true;
             }
         }
     }
@@ -168,7 +178,7 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
     }
 
     char basename[128];
-    std::snprintf(basename, sizeof(basename), "greedy_postlp_t%s.txt", time_label);
+    std::snprintf(basename, sizeof(basename), "greedy_postlp_bestimpr_t%s.txt", time_label);
     char path[1024];
     if (pd_join_path(path, sizeof(path), result_dir, basename) != 0) {
         if (err && err_sz > 0)
@@ -182,7 +192,7 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
         if (!f)
             break;
         std::fclose(f);
-        if (std::snprintf(basename, sizeof(basename), "greedy_postlp_t%s_%d.txt",
+        if (std::snprintf(basename, sizeof(basename), "greedy_postlp_bestimpr_t%s_%d.txt",
                           time_label, suffix) >= (int)sizeof(basename)) {
             if (err && err_sz > 0)
                 std::snprintf(err, err_sz, "result basename too long");
