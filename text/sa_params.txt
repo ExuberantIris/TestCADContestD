@@ -4,6 +4,9 @@
 # Stop after this many consecutive SA iterations with no best-score improvement.
 no_improve_limit=10000
 
+# Batch SA: run this many moves per batch (always accept within batch; 0 = Metropolis mode).
+sa_batch_size=20
+
 # Competition score weights (a + b + g = 1): TNS, WNS, Area
 score_a=0.6
 score_b=0.2

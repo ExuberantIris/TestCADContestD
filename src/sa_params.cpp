@@ -39,6 +39,7 @@ void sa_params_load(SaParams *out, const char *path)
         return;
 
     out->no_improve_limit = 10000;
+    out->sa_batch_size = 20;
     out->score_weights.a = 0.6;
     out->score_weights.b = 0.2;
     out->score_weights.g = 0.2;
@@ -64,6 +65,10 @@ void sa_params_load(SaParams *out, const char *path)
             const int v = static_cast<int>(std::atof(val));
             if (v > 0)
                 out->no_improve_limit = v;
+        } else if (std::strcmp(key, "sa_batch_size") == 0) {
+            const int v = static_cast<int>(std::atof(val));
+            if (v >= 0)
+                out->sa_batch_size = v;
         } else if (std::strcmp(key, "score_a") == 0) {
             out->score_weights.a = std::atof(val);
         } else if (std::strcmp(key, "score_b") == 0) {

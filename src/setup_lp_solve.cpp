@@ -493,6 +493,35 @@ bool try_gap_refine_move(const std::vector<double> &target_d_ss, const std::vect
     return true;
 }
 
+bool try_hybrid_move(const std::vector<double> &target_d_ss, const SaPgCtx &ctx,
+                     const LpProblem *pb, const std::vector<BranchDpOpts> &opts,
+                     const std::vector<int> &branch_stall, int stall_limit,
+                     const LpScoreWeights &wt, const std::vector<double> &cur_ss,
+                     std::mt19937 &rng, std::vector<double> *trial_ss, int *moved_branch)
+{
+    std::vector<int> viol_paths;
+    build_weighted_violating_paths(ctx, wt, &viol_paths);
+
+    *trial_ss = cur_ss;
+    *moved_branch = -1;
+
+    if (!viol_paths.empty() &&
+        std::uniform_real_distribution<double>(0.0, 1.0)(rng) < SaConfig::kPhase2PathMoveProb) {
+        const int path_idx = viol_paths[static_cast<std::size_t>(
+            std::uniform_int_distribution<int>(0, static_cast<int>(viol_paths.size()) - 1)(rng))];
+        if (try_path_directed_move(path_idx, ctx, pb, opts, branch_stall, stall_limit, rng,
+                                   trial_ss, moved_branch))
+            return true;
+    }
+
+    if (try_area_recovery_move(pb, opts, cur_ss, branch_stall, stall_limit, rng, trial_ss,
+                               moved_branch))
+        return true;
+
+    return try_gap_refine_move(target_d_ss, opts, pb, cur_ss, branch_stall, stall_limit, rng,
+                               trial_ss, moved_branch);
+}
+
 void propagate_tree_arrivals(const PdDesign *d, const LpProblem *pb, const std::vector<double> &d_ss,
                              std::vector<double> *arrival)
 {
@@ -986,87 +1015,105 @@ int seg_tree_sa_solve(LpProblem *pb, const PdDesign *d, const LpBufferChainDp *d
     double temperature = SaConfig::kSaTemperatureInit;
     int no_improve_iters = 0;
     int stalled = 0;
+    const int batch_sz = params.sa_batch_size;
 
-    while (elapsed_sec(t0) < time_limit_sec) {
-        out->iterations++;
+    if (batch_sz > 0) {
+        while (elapsed_sec(t0) < time_limit_sec) {
+            for (int bi = 0; bi < batch_sz && elapsed_sec(t0) < time_limit_sec; bi++) {
+                out->iterations++;
 
-        sa_eval_state(pb, d, cur_ss, cur_ff, dp_ss, dp_ff, &ctx);
+                sa_eval_state(pb, d, cur_ss, cur_ff, dp_ss, dp_ff, &ctx);
 
-        std::vector<int> viol_paths;
-        build_weighted_violating_paths(ctx, wt, &viol_paths);
+                std::vector<double> trial_ss;
+                int moved_branch = -1;
+                if (!try_hybrid_move(target_d_ss, ctx, pb, opts, branch_stall,
+                                     SaConfig::kSaBranchNoImproveLimit, wt, cur_ss, rng,
+                                     &trial_ss, &moved_branch))
+                    continue;
 
-        std::vector<double> trial_ss = cur_ss;
-        int moved_branch = -1;
-        bool moved = false;
-
-        if (!viol_paths.empty() &&
-            std::uniform_real_distribution<double>(0.0, 1.0)(rng) < SaConfig::kPhase2PathMoveProb) {
-            const int path_idx = viol_paths[static_cast<std::size_t>(
-                std::uniform_int_distribution<int>(0, static_cast<int>(viol_paths.size()) - 1)(rng))];
-            moved = try_path_directed_move(path_idx, ctx, pb, opts, branch_stall,
-                                           SaConfig::kSaBranchNoImproveLimit, rng, &trial_ss,
-                                           &moved_branch);
-        }
-
-        if (!moved)
-            moved = try_area_recovery_move(pb, opts, cur_ss, branch_stall,
-                                           SaConfig::kSaBranchNoImproveLimit, rng, &trial_ss,
-                                           &moved_branch);
-
-        if (!moved) {
-            moved = try_gap_refine_move(target_d_ss, opts, pb, cur_ss, branch_stall,
-                                        SaConfig::kSaBranchNoImproveLimit, rng, &trial_ss,
-                                        &moved_branch);
-        }
-
-        if (!moved || moved_branch < 0) {
-            no_improve_iters++;
-            if (no_improve_iters >= params.no_improve_limit) {
-                stalled = 1;
-                break;
+                cur_ss = std::move(trial_ss);
+                sa_eval_state(pb, d, cur_ss, cur_ff, dp_ss, dp_ff, &ctx);
+                if (moved_branch >= 0)
+                    branch_stall[static_cast<std::size_t>(moved_branch)]++;
             }
-            continue;
-        }
 
-        const double old_score = weighted_timing_score(pb, ctx, wt);
-        SaPgCtx trial_ctx = ctx;
-        sa_eval_state(pb, d, trial_ss, cur_ff, dp_ss, dp_ff, &trial_ctx);
-        const double new_score = weighted_timing_score(pb, trial_ctx, wt);
-        const double delta = new_score - old_score;
-        const bool accept =
-            delta > 0.0 ||
-            (temperature > 1e-9 && uni01(rng) < std::exp(delta / temperature));
-
-        bool improved_best = false;
-        if (accept) {
-            cur_ss = std::move(trial_ss);
-            ctx = trial_ctx;
-            if (new_score > best_score + 1e-12) {
-                best_score = new_score;
+            const double batch_end_score = weighted_timing_score(pb, ctx, wt);
+            if (batch_end_score > best_score + 1e-12) {
+                best_score = batch_end_score;
                 best_ss = cur_ss;
                 best_ff = cur_ff;
-                improved_best = true;
+                no_improve_iters = 0;
+            } else {
+                cur_ss = best_ss;
+                sa_eval_state(pb, d, cur_ss, cur_ff, dp_ss, dp_ff, &ctx);
+                no_improve_iters += batch_sz;
+                if (no_improve_iters >= params.no_improve_limit) {
+                    stalled = 1;
+                    break;
+                }
             }
         }
+    } else {
+        while (elapsed_sec(t0) < time_limit_sec) {
+            out->iterations++;
 
-        if (improved_best)
-            branch_stall[static_cast<std::size_t>(moved_branch)] = 0;
-        else
-            branch_stall[static_cast<std::size_t>(moved_branch)]++;
+            sa_eval_state(pb, d, cur_ss, cur_ff, dp_ss, dp_ff, &ctx);
 
-        if (improved_best) {
-            no_improve_iters = 0;
-        } else {
-            no_improve_iters++;
-            if (no_improve_iters >= params.no_improve_limit) {
-                stalled = 1;
-                break;
+            std::vector<double> trial_ss;
+            int moved_branch = -1;
+            const bool moved = try_hybrid_move(target_d_ss, ctx, pb, opts, branch_stall,
+                                               SaConfig::kSaBranchNoImproveLimit, wt, cur_ss,
+                                               rng, &trial_ss, &moved_branch);
+
+            if (!moved || moved_branch < 0) {
+                no_improve_iters++;
+                if (no_improve_iters >= params.no_improve_limit) {
+                    stalled = 1;
+                    break;
+                }
+                continue;
             }
-        }
 
-        temperature *= SaConfig::kSaTemperatureDecay;
-        if (temperature < SaConfig::kSaTemperatureFloor)
-            temperature = SaConfig::kSaTemperatureInit;
+            const double old_score = weighted_timing_score(pb, ctx, wt);
+            SaPgCtx trial_ctx = ctx;
+            sa_eval_state(pb, d, trial_ss, cur_ff, dp_ss, dp_ff, &trial_ctx);
+            const double new_score = weighted_timing_score(pb, trial_ctx, wt);
+            const double delta = new_score - old_score;
+            const bool accept =
+                delta > 0.0 ||
+                (temperature > 1e-9 && uni01(rng) < std::exp(delta / temperature));
+
+            bool improved_best = false;
+            if (accept) {
+                cur_ss = std::move(trial_ss);
+                ctx = trial_ctx;
+                if (new_score > best_score + 1e-12) {
+                    best_score = new_score;
+                    best_ss = cur_ss;
+                    best_ff = cur_ff;
+                    improved_best = true;
+                }
+            }
+
+            if (improved_best)
+                branch_stall[static_cast<std::size_t>(moved_branch)] = 0;
+            else
+                branch_stall[static_cast<std::size_t>(moved_branch)]++;
+
+            if (improved_best) {
+                no_improve_iters = 0;
+            } else {
+                no_improve_iters++;
+                if (no_improve_iters >= params.no_improve_limit) {
+                    stalled = 1;
+                    break;
+                }
+            }
+
+            temperature *= SaConfig::kSaTemperatureDecay;
+            if (temperature < SaConfig::kSaTemperatureFloor)
+                temperature = SaConfig::kSaTemperatureInit;
+        }
     }
 
     out->elapsed_sec = elapsed_sec(t0);
@@ -1074,7 +1121,13 @@ int seg_tree_sa_solve(LpProblem *pb, const PdDesign *d, const LpBufferChainDp *d
     out->solution.d_ss = best_ss;
     out->solution.d_ff = best_ff;
     out->solution.status = out->timed_out ? 2 : 0;
-    if (stalled)
+    if (batch_sz > 0) {
+        if (stalled)
+            out->solution.solver_name = "phase2_batch_sa(stall)";
+        else
+            out->solution.solver_name =
+                out->timed_out ? "phase2_batch_sa(timed_out)" : "phase2_batch_sa";
+    } else if (stalled)
         out->solution.solver_name = "phase2_hybrid_sa(stall)";
     else
         out->solution.solver_name =

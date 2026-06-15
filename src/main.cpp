@@ -98,8 +98,8 @@ int main(int argc, char **argv)
     std::printf("=== sa_solver (seg-tree direct + SA) ===\n");
     std::printf("Input folder: %s\n", testcase_dir);
     std::printf("Total limit : %.1f sec | SA phase: %.1f sec\n", total_limit, sa_limit);
-    std::printf("Score weights: a=%.4f b=%.4f g=%.4f | no_improve_limit=%d\n", wt.a, wt.b, wt.g,
-                sa_params.no_improve_limit);
+    std::printf("Score weights: a=%.4f b=%.4f g=%.4f | no_improve_limit=%d | sa_batch_size=%d\n",
+                wt.a, wt.b, wt.g, sa_params.no_improve_limit, sa_params.sa_batch_size);
 
     if (pd_load_design(testcase_dir, &design, err, sizeof(err)) != 0) {
         std::fprintf(stderr, "Load failed: %s\n", err);
@@ -232,7 +232,7 @@ int main(int argc, char **argv)
         phases[0].iterations = phase1.iterations;
         phases[0].metrics = phase1_metrics;
 
-        phases[1].phase_name = "phase-2 hybrid_path_sa";
+        phases[1].phase_name = "phase-2 batch_sa";
         phases[1].solver_name = phase2.solution.solver_name.c_str();
         phases[1].solver_status = phase2.solution.status;
         phases[1].elapsed_sec = phase2.elapsed_sec;

@@ -1,0 +1,31 @@
+sa_solver result (multi-phase)
+testcase_dir: testcase/testcase4
+wall_elapsed_sec: 227.399
+score_weights: a=0.600000 b=0.200000 g=0.200000
+sa_no_improve_limit: 10000
+
+=== baseline (ori) ===
+SS setup WNS : -0.593800  TNS : -2277.689600
+FF hold  WNS : -0.121700  TNS : -6.990400
+Total area   : 10539.493920
+Score (a=0.6000 b=0.2000 g=0.2000): 0.000000
+
+=== phase-1 seg_tree_direct ===
+solver: seg_tree_direct
+solver_status: 0
+elapsed_sec: 0.000
+iterations: 1
+SS setup WNS : -0.425600  TNS : -1752.460100
+FF hold  WNS : -0.073200  TNS : -1.343300
+Total area   : 22379.911520
+Score (a=0.6000 b=0.2000 g=0.2000): 0.155022
+
+=== phase-2 batch_sa ===
+solver: phase2_batch_sa(timed_out)
+solver_status: 2
+elapsed_sec: 180.023
+iterations: 10689
+SS setup WNS : -0.417800  TNS : -1199.124500
+FF hold  WNS : -0.045200  TNS : -0.668500
+Total area   : 22327.045520
+Score (a=0.6000 b=0.2000 g=0.2000): 0.282187

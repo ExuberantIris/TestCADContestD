@@ -7,6 +7,8 @@
 /** Tunable SA / score parameters loaded from text/sa_params.txt. */
 struct SaParams {
     int no_improve_limit = 1000;
+    /** Batch SA: consecutive moves per batch (0 = Metropolis hybrid mode). */
+    int sa_batch_size = 20;
     LpScoreWeights score_weights{};
 };
 
