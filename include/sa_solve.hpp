@@ -15,7 +15,4 @@ struct SaSolveResult {
     long long iterations = 0;
 };
 
-int sa_solve(LpProblem *pb, const PdDesign *d, const LpBufferChainDp *dp_ss,
-             const LpBufferChainDp *dp_ff, SaSolveResult *out, char *err, std::size_t err_sz);
-
 void sa_solution_free(SaSolveResult *out);

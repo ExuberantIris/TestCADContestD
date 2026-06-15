@@ -60,4 +60,6 @@ verify/%.o: verify/%.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(PD_OBJS) $(SA_OBJS) $(UNITTEST_OBJS) $(PRINT_LP_OBJS) verify/verify_metrics.o sa_solver test_buffer_chain_dp print_lp_input verify/verify_metrics
+	rm -f $(PD_OBJS) $(SA_OBJS) $(UNITTEST_OBJS) $(PRINT_LP_OBJS) verify/verify_metrics.o
+	rm -f sa_solver test_buffer_chain_dp print_lp_input verify/verify_metrics
+	rm -f src/*.o src/*.lp.o tools/*.o verify/*.o unittest/*.o

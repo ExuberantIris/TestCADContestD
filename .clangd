@@ -1,1 +1,6 @@
 CompileDatabase: build
+
+CompileFlags:
+  Add:
+    - -Iinclude
+    - -std=c++17

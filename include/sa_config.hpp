@@ -1,12 +1,12 @@
 #pragma once
 
-/** Centralized setup-topo + FF-gap SA parameters. */
+/** Centralized segment-tree SA parameters. */
 namespace SaConfig {
 
 /** Wall-clock budget for SA phase (seconds). */
 inline constexpr double kSaTimeLimitSec = 180.0;
 
-/** Number of leaf FFs with largest ideal-gap picked per SA iteration (K). */
+/** Number of branches with largest target-vs-current gap picked per SA iteration (K). */
 inline constexpr int kSaLeafFfPickCount = 40;
 
 /** Consecutive SA iterations without timing-score improvement before stopping (N). */

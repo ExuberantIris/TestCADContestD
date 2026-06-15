@@ -62,7 +62,7 @@ int main(int argc, char **argv)
     const double total_limit = problem.time_limit_sec;
     const double sa_limit = read_sa_limit();
 
-    std::printf("=== sa_solver (new_attempt topo + FF-gap SA) ===\n");
+    std::printf("=== sa_solver (seg-tree direct) ===\n");
     std::printf("Input folder: %s\n", testcase_dir);
     std::printf("Total limit : %.1f sec | SA phase: %.1f sec\n", total_limit, sa_limit);
 
@@ -105,7 +105,7 @@ int main(int argc, char **argv)
 
     if (setup_longest_path_solve(&problem, &design, &dp_ss, &dp_ff, &initial, sa_limit, &sa_result,
                                  err, sizeof(err)) != 0) {
-        std::fprintf(stderr, "Setup topo FF-gap SA failed: %s\n", err);
+        std::fprintf(stderr, "Seg-tree SA failed: %s\n", err);
         sa_solution_free(&sa_result);
         lp_problem_free(&problem);
         pd_free_design(&design);
@@ -151,6 +151,10 @@ int main(int argc, char **argv)
             std::fprintf(stderr, "Write structure failed: %s\n", err);
         } else {
             std::printf("Wrote %s\n", struct_path);
+        }
+
+        if (seg_tree_write_outputs(&design, &problem, argv[2], err, sizeof(err)) != 0) {
+            std::fprintf(stderr, "Write segment tree outputs failed: %s\n", err);
         }
     }
 

@@ -25,9 +25,8 @@ set(SA_SOURCES
     src/lp_branch.cpp
     src/lp_score.cpp
     src/lp_buffer_dp.cpp
-    src/lp_mo_init.cpp
     src/sa_eval.cpp
-    src/sa_path_solve.cpp
+    src/setup_lp_solve.cpp
     src/sa_apply.cpp
 )
 

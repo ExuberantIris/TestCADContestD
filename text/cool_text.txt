@@ -1,0 +1,78 @@
+Segment-Tree SA：如何用 bottom-up 目標與 top-down 比較做出較好的結果
+================================================================
+
+## 問題背景
+
+Setup timing 的關鍵是讓每顆 FF 的 clock arrival 滿足 timing path 上的 skew 需求。
+同一個 parent 底下的多個子節點，往往各自 subtree 內有不同的「最晚理想到達時間」。
+若只局部調單一 buffer，容易顧此失彼；我們需要一個能同時平衡 sibling 的目標分配方式。
+
+## 1. 先算每顆 FF 的理想到達時間（ideal arrival）
+
+從 SS_delay.rpt 的 timing path 建立 pseudo-DAG：
+  launch_FF --(data_ss + t_setup - clock_period)--> capture_FF
+
+對這個 DAG 做 topo sort + longest-path relaxation，得到每個節點（含 FF）的 ideal_arrival[]。
+這代表：若 setup 要過，該 FF 至少需要多晚收到 clock。
+
+## 2. Bottom-up 線段樹：在 clock tree 上分配 sibling buffer
+
+對 clock tree 做 post-order DFS。每個節點回傳其 subtree 內 FF 的 max(ideal_arrival)。
+
+遇到 parent 與尚未分配 delay 的子節點 a, b, ... 時：
+  令 M = max(子節點 subtree 需求)
+  對子節點 v：
+    target_d_ss[parent->v] = M - req[v]
+
+直觀上就是「a > b 時，較晚的那條路不插 buffer（edge delay = 0），
+較早的那條路補 (a - b) 的 buffer 把它追上」。
+多個 sibling 時，只有 max 那條 edge 為 0，其餘各自補差值。
+
+這一步把全域 timing 需求壓成每條 branch 一個離散可調的 target delay，
+形成一棵與 clock tree 同形的「目標延遲樹」。
+
+## 3. Top-down 比較：現有 clock tree vs 目標樹
+
+SA 每一輪維護目前的 cur_ss[]（每條 branch 的 SS delay）。
+對每條 branch b 計算：
+  gap[b] = target_d_ss[b] - cur_ss[b]
+
+|gap| 越大，代表現有 buffer sizing 與線段樹目標差越多。
+取 gap 最大的 K 條 branch（K=40）作為候選，隨機挑一條嘗試往 target 靠近一步
+（在 buf.lib 允許的離散 delay 上取 next higher / next lower）。
+
+## 4. SA 接受準則
+
+用 lp_compute_timing_score（只看 WNS/TNS，不含 area）做 Metropolis 接受：
+  - 分數變好 → 接受
+  - 分數變差 → 以溫度 T 機率性接受（避免卡在局部最佳）
+
+溫度每輪乘以 0.9995，低於 floor 後重置，讓搜尋能持續探索。
+
+## 5. 為什麼這樣有效
+
+1. **Sibling 平衡**：bottom-up 規則保證同一 parent 下，較慢的 subtree 不被多餘 buffer 拖慢，
+   較快的 subtree 被補 delay，減少 capture/launch skew 失衡。
+
+2. **全域目標分解**：ideal arrival 來自所有 timing path 的 longest-path，
+   subtree max 把多條 path 的需求聚合到 clock tree 的每個分叉點。
+
+3. **離散 buffer 空間上的導引**：target 是連續值，SA 用離散 cell delay 逐步逼近，
+   並用 timing score 修正線段樹一次分配無法滿足的耦合效應（一條 branch 影響多條 path）。
+
+4. **停滯與 blacklist**：單一 branch 連續 1000 次無改善則暫停調整；
+   全域 1000 次無改善則停止（或時間到）。
+
+## 6. 輸出
+
+最佳 cur_ss[] 經 sa_apply_solution 轉成 buffer cell resize，
+寫入 modified_clk_tree.structure。
+verify/verify_metrics 再從 structure 重算 SS/FF WNS/TNS 與 area。
+
+## 參數（include/sa_config.hpp）
+
+- kSaTimeLimitSec = 180
+- kSaLeafFfPickCount = 40   （每輪挑 gap 最大的 branch 數）
+- kSaNoImproveLimit = 1000
+- kSaBranchNoImproveLimit = 1000
+- Metropolis: T0=1.0, decay=0.9995, floor=1e-4
