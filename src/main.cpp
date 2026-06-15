@@ -8,7 +8,6 @@
 #include "sa_solve.hpp"
 #include "setup_lp_solve.hpp"
 
-#include <chrono>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
@@ -27,15 +26,15 @@ static void read_time_limit(LpProblem *pb)
     }
 }
 
-static double read_setup_limit()
+static double read_sa_limit()
 {
-    const char *env = std::getenv("SETUP_LP_TIME_LIMIT");
+    const char *env = std::getenv("SETUP_SA_TIME_LIMIT");
     if (env && env[0]) {
         const double t = std::atof(env);
         if (t > 0.1)
             return t;
     }
-    return SaConfig::kSetupLpTimeLimitSec;
+    return SaConfig::kSaTimeLimitSec;
 }
 
 int main(int argc, char **argv)
@@ -48,7 +47,6 @@ int main(int argc, char **argv)
     LpBufferChainDp dp_ss, dp_ff;
     char err[512];
     const char *testcase_dir;
-    const auto wall_t0 = std::chrono::steady_clock::now();
 
     if (argc < 2) {
         std::fprintf(stderr, "Usage: %s <testcase_dir> [result_dir]\n", argv[0]);
@@ -62,11 +60,11 @@ int main(int argc, char **argv)
         problem.time_limit_sec = 600.0;
 
     const double total_limit = problem.time_limit_sec;
-    const double setup_limit = read_setup_limit();
+    const double sa_limit = read_sa_limit();
 
-    std::printf("=== sa_solver (new_attempt setup longest-path) ===\n");
+    std::printf("=== sa_solver (new_attempt topo + FF-gap SA) ===\n");
     std::printf("Input folder: %s\n", testcase_dir);
-    std::printf("Total limit : %.1f sec | Setup LP: %.1f sec\n", total_limit, setup_limit);
+    std::printf("Total limit : %.1f sec | SA phase: %.1f sec\n", total_limit, sa_limit);
 
     if (pd_load_design(testcase_dir, &design, err, sizeof(err)) != 0) {
         std::fprintf(stderr, "Load failed: %s\n", err);
@@ -95,19 +93,19 @@ int main(int argc, char **argv)
     }
 
     lp_compute_metrics(&design, &ori);
-    ori.score = lp_compute_score(ori.wns_setup_ss, ori.tns_setup_ss, ori.wns_hold_ff, ori.tns_hold_ff,
-                                 ori.area, problem.wns_ss_ori, problem.tns_ss_ori, problem.wns_ff_ori,
-                                 problem.tns_ff_ori, problem.area_ori);
-    lp_print_metrics("baseline (ori)", &ori);
+    ori.score = lp_compute_timing_score(ori.wns_setup_ss, ori.tns_setup_ss, ori.wns_hold_ff,
+                                        ori.tns_hold_ff, problem.wns_ss_ori, problem.tns_ss_ori,
+                                        problem.wns_ff_ori, problem.tns_ff_ori);
+    lp_print_timing_metrics("baseline (ori)", &ori);
 
     std::vector<BranchDpOpts> opts;
     sa_build_branch_opts(&problem, &design, &opts);
     LpSolution initial;
     sa_init_from_design(&problem, &design, opts, &initial.d_ss, &initial.d_ff);
 
-    if (setup_longest_path_solve(&problem, &design, &dp_ss, &dp_ff, &initial, setup_limit,
-                                 &sa_result, err, sizeof(err)) != 0) {
-        std::fprintf(stderr, "Setup longest-path failed: %s\n", err);
+    if (setup_longest_path_solve(&problem, &design, &dp_ss, &dp_ff, &initial, sa_limit, &sa_result,
+                                 err, sizeof(err)) != 0) {
+        std::fprintf(stderr, "Setup topo FF-gap SA failed: %s\n", err);
         sa_solution_free(&sa_result);
         lp_problem_free(&problem);
         pd_free_design(&design);
@@ -118,6 +116,21 @@ int main(int argc, char **argv)
                 sa_result.solution.solver_name.c_str(), sa_result.solution.status,
                 static_cast<long long>(sa_result.iterations), sa_result.elapsed_sec);
 
+    SaPgCtx opt_ctx;
+    if (sa_build_ctx(&problem, &design, &opt_ctx)) {
+        sa_eval_state(&problem, &design, sa_result.solution.d_ss, sa_result.solution.d_ff, &dp_ss,
+                      &dp_ff, &opt_ctx);
+        opt.wns_setup_ss = opt_ctx.wns_ss;
+        opt.tns_setup_ss = opt_ctx.tns_ss;
+        opt.wns_hold_ff = opt_ctx.wns_ff;
+        opt.tns_hold_ff = opt_ctx.tns_ff;
+        opt.area = opt_ctx.area;
+        opt.score = lp_compute_timing_score(opt.wns_setup_ss, opt.tns_setup_ss, opt.wns_hold_ff,
+                                            opt.tns_hold_ff, problem.wns_ss_ori, problem.tns_ss_ori,
+                                            problem.wns_ff_ori, problem.tns_ff_ori);
+        lp_print_timing_metrics("after optimize (from delay)", &opt);
+    }
+
     if (sa_apply_solution(&design, &problem, &sa_result.solution, &dp_ss, &dp_ff, err,
                           sizeof(err)) != 0) {
         std::fprintf(stderr, "Apply failed: %s\n", err);
@@ -127,29 +140,9 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    lp_compute_metrics(&design, &opt);
-    opt.score = lp_compute_score(opt.wns_setup_ss, opt.tns_setup_ss, opt.wns_hold_ff, opt.tns_hold_ff,
-                                 opt.area, problem.wns_ss_ori, problem.tns_ss_ori, problem.wns_ff_ori,
-                                 problem.tns_ff_ori, problem.area_ori);
-    lp_print_metrics("after optimize", &opt);
-
-    const double wall_elapsed =
-        std::chrono::duration<double>(std::chrono::steady_clock::now() - wall_t0).count();
-
     if (argc >= 3) {
         char struct_path[1024];
         mkdir(argv[2], 0755);
-
-        if (lp_write_result_txt(argv[2], testcase_dir, &ori, &opt, sa_result.solution.solver_name.c_str(),
-                                sa_result.solution.status, total_limit, setup_limit, 0.0, 0,
-                                sa_result.elapsed_sec, wall_elapsed, sa_result.iterations,
-                                sa_result.use_second_best, nullptr, err, sizeof(err)) != 0) {
-            std::fprintf(stderr, "Write result.txt failed: %s\n", err);
-        } else {
-            char result_txt[1024];
-            if (pd_join_path(result_txt, sizeof(result_txt), argv[2], "result.txt") == 0)
-                std::printf("Wrote %s\n", result_txt);
-        }
 
         if (pd_join_path(struct_path, sizeof(struct_path), argv[2],
                          "modified_clk_tree.structure") != 0) {

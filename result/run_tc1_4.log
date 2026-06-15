@@ -1,0 +1,158 @@
+========================================
+==> testcase1
+========================================
+g++ -std=c++17 -Wall -Wextra -O2 -Iinclude -c -o src/main.o src/main.cpp
+g++ -std=c++17 -Wall -Wextra -O2 -Iinclude -c -o verify/verify_metrics.o verify/verify_metrics.cpp
+g++ -std=c++17 -Wall -Wextra -O2 -Iinclude -o verify/verify_metrics ./src/pd_parser.lp.o ./src/pd_util.lp.o ./src/pd_clock.lp.o ./src/pd_timing.lp.o ./src/pd_output.lp.o verify/verify_metrics.o src/lp_score.o -lm
+g++ -std=c++17 -Wall -Wextra -O2 -Iinclude -o sa_solver ./src/pd_parser.lp.o ./src/pd_util.lp.o ./src/pd_clock.lp.o ./src/pd_timing.lp.o ./src/pd_output.lp.o src/main.o src/lp_branch.o src/lp_score.o src/lp_buffer_dp.o src/sa_eval.o src/setup_lp_solve.o src/sa_apply.o -lm
+==> Running sa_solver (timeout: 720s)
+=== sa_solver (new_attempt topo + FF-gap SA) ===
+Input folder: testcase/testcase1
+Total limit : 570.0 sec (topo FF + SA)
+DP max delay: 0.1280
+=== baseline (ori) ===
+SS setup WNS : -0.284800  TNS : -37.858700
+FF hold  WNS : 0.013600  TNS : 0.000000
+Score (timing only, no area): 0.000000
+Solver: setup_topo_ff_sa(timed_out) (status=2, iters=851030, elapsed=570.0s)
+=== after optimize (from delay) ===
+SS setup WNS : 0.002500  TNS : 0.000000
+FF hold  WNS : 0.012400  TNS : 0.000000
+Score (timing only, no area): 2.000000
+Wrote result/testcase1/modified_clk_tree.structure
+==> Running verify_metrics
+Wrote result/testcase1/analysis.txt
+testcase_dir: testcase/testcase1
+original_structure: testcase/testcase1/clk_tree.structure
+modified_structure: result/testcase1/modified_clk_tree.structure
+
+=== baseline (original clk tree) ===
+SS setup WNS : -0.284800  TNS : -37.858700
+FF hold  WNS : 0.013600  TNS : 0.000000
+Total area   : 422.990656
+Score (a=b=g=1): 0.000000
+
+=== after optimize ===
+SS setup WNS : -0.284800  TNS : -38.708500
+FF hold  WNS : 0.013600  TNS : 0.000000
+Total area   : 438.654656
+Score (a=b=g=1): -0.022447
+solver_timed_out: 0
+wall_elapsed_sec: 587.944
+========================================
+==> testcase2
+========================================
+make: 'sa_solver' is up to date.
+g++ -std=c++17 -Wall -Wextra -O2 -Iinclude -o verify/verify_metrics ./src/pd_parser.lp.o ./src/pd_util.lp.o ./src/pd_clock.lp.o ./src/pd_timing.lp.o ./src/pd_output.lp.o verify/verify_metrics.o src/lp_score.o -lm
+==> Running sa_solver (timeout: 720s)
+=== sa_solver (new_attempt topo + FF-gap SA) ===
+Input folder: testcase/testcase2
+Total limit : 570.0 sec (topo FF + SA)
+DP max delay: 0.1280
+=== baseline (ori) ===
+SS setup WNS : -0.302000  TNS : -98.697600
+FF hold  WNS : -0.029800  TNS : -0.103400
+Score (timing only, no area): 0.000000
+Solver: setup_topo_ff_sa(timed_out) (status=2, iters=155459, elapsed=570.0s)
+=== after optimize (from delay) ===
+SS setup WNS : 0.001000  TNS : 0.000000
+FF hold  WNS : -0.018200  TNS : -0.035300
+Score (timing only, no area): 3.047869
+Wrote result/testcase2/modified_clk_tree.structure
+==> Running verify_metrics
+Wrote result/testcase2/analysis.txt
+testcase_dir: testcase/testcase2
+original_structure: testcase/testcase2/clk_tree.structure
+modified_structure: result/testcase2/modified_clk_tree.structure
+
+=== baseline (original clk tree) ===
+SS setup WNS : -0.302000  TNS : -98.697600
+FF hold  WNS : -0.029800  TNS : -0.103400
+Total area   : 980.414032
+Score (a=b=g=1): 0.000000
+
+=== after optimize ===
+SS setup WNS : -0.302000  TNS : -104.562700
+FF hold  WNS : -0.029800  TNS : -0.103400
+Total area   : 1070.286232
+Score (a=b=g=1): -0.059425
+solver_timed_out: 0
+wall_elapsed_sec: 585.886
+========================================
+==> testcase3
+========================================
+make: 'sa_solver' is up to date.
+g++ -std=c++17 -Wall -Wextra -O2 -Iinclude -o verify/verify_metrics ./src/pd_parser.lp.o ./src/pd_util.lp.o ./src/pd_clock.lp.o ./src/pd_timing.lp.o ./src/pd_output.lp.o verify/verify_metrics.o src/lp_score.o -lm
+==> Running sa_solver (timeout: 720s)
+=== sa_solver (new_attempt topo + FF-gap SA) ===
+Input folder: testcase/testcase3
+Total limit : 570.0 sec (topo FF + SA)
+DP max delay: 0.1280
+=== baseline (ori) ===
+SS setup WNS : -0.459400  TNS : -374.232900
+FF hold  WNS : -0.107800  TNS : -1.024300
+Score (timing only, no area): 0.000000
+Solver: setup_topo_ff_sa(timed_out) (status=2, iters=17905, elapsed=570.0s)
+=== after optimize (from delay) ===
+SS setup WNS : -0.082200  TNS : -45.184900
+FF hold  WNS : -0.097500  TNS : -1.007600
+Score (timing only, no area): 1.812182
+Wrote result/testcase3/modified_clk_tree.structure
+==> Running verify_metrics
+Wrote result/testcase3/analysis.txt
+testcase_dir: testcase/testcase3
+original_structure: testcase/testcase3/clk_tree.structure
+modified_structure: result/testcase3/modified_clk_tree.structure
+
+=== baseline (original clk tree) ===
+SS setup WNS : -0.459400  TNS : -374.232900
+FF hold  WNS : -0.107800  TNS : -1.024300
+Total area   : 2784.190560
+Score (a=b=g=1): 0.000000
+
+=== after optimize ===
+SS setup WNS : -0.459400  TNS : -364.018200
+FF hold  WNS : -0.100600  TNS : -0.835400
+Total area   : 3655.108960
+Score (a=b=g=1): 0.278504
+solver_timed_out: 0
+wall_elapsed_sec: 589.657
+========================================
+==> testcase4
+========================================
+make: 'sa_solver' is up to date.
+g++ -std=c++17 -Wall -Wextra -O2 -Iinclude -o verify/verify_metrics ./src/pd_parser.lp.o ./src/pd_util.lp.o ./src/pd_clock.lp.o ./src/pd_timing.lp.o ./src/pd_output.lp.o verify/verify_metrics.o src/lp_score.o -lm
+==> Running sa_solver (timeout: 720s)
+=== sa_solver (new_attempt topo + FF-gap SA) ===
+Input folder: testcase/testcase4
+Total limit : 570.0 sec (topo FF + SA)
+DP max delay: 0.1280
+=== baseline (ori) ===
+SS setup WNS : -0.593800  TNS : -2277.689600
+FF hold  WNS : -0.121700  TNS : -6.990400
+Score (timing only, no area): 0.000000
+Solver: setup_topo_ff_sa(timed_out) (status=2, iters=584, elapsed=570.5s)
+=== after optimize (from delay) ===
+SS setup WNS : -0.454800  TNS : -1275.295200
+FF hold  WNS : -0.117800  TNS : -7.422700
+Score (timing only, no area): 0.644382
+Wrote result/testcase4/modified_clk_tree.structure
+==> Running verify_metrics
+Wrote result/testcase4/analysis.txt
+testcase_dir: testcase/testcase4
+original_structure: testcase/testcase4/clk_tree.structure
+modified_structure: result/testcase4/modified_clk_tree.structure
+
+=== baseline (original clk tree) ===
+SS setup WNS : -0.593800  TNS : -2277.689600
+FF hold  WNS : -0.121700  TNS : -6.990400
+Total area   : 10539.493920
+Score (a=b=g=1): 0.000000
+
+=== after optimize ===
+SS setup WNS : -0.546800  TNS : -2211.543900
+FF hold  WNS : -0.116100  TNS : -5.517200
+Total area   : 10506.403720
+Score (a=b=g=1): 0.364953
+solver_timed_out: 0
+wall_elapsed_sec: 663.693

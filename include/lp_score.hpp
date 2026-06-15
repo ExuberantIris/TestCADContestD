@@ -17,7 +17,12 @@ void lp_compute_metrics(const PdDesign *d, LpMetrics *m);
 double lp_compute_score(double wns_ss, double tns_ss, double wns_ff, double tns_ff, double area,
                         double wns_ss_ori, double tns_ss_ori, double wns_ff_ori, double tns_ff_ori,
                         double area_ori);
+/** Competition score using WNS/TNS only (no area term). */
+double lp_compute_timing_score(double wns_ss, double tns_ss, double wns_ff, double tns_ff,
+                               double wns_ss_ori, double tns_ss_ori, double wns_ff_ori,
+                               double tns_ff_ori);
 void lp_print_metrics(const char *label, const LpMetrics *m);
+void lp_print_timing_metrics(const char *label, const LpMetrics *m);
 
 int lp_write_result_txt(const char *result_dir, const char *testcase_dir, const LpMetrics *ori,
                         const LpMetrics *opt, const char *solver_name, int solver_status,

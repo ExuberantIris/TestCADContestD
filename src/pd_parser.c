@@ -373,16 +373,23 @@ int pd_load_design(const char *testcase_dir, PdDesign *d, char *err, size_t err_
 {
     char path[1024];
 
+    if (pd_join_path(path, sizeof(path), testcase_dir, "clk_tree.structure") != 0)
+        return fail(err, err_sz, "path too long");
+    return pd_load_design_with_structure(testcase_dir, path, d, err, err_sz);
+}
+
+int pd_load_design_with_structure(const char *testcase_dir, const char *structure_path,
+                                  PdDesign *d, char *err, size_t err_sz)
+{
     pd_free_design(d);
 
+    char path[1024];
     if (pd_join_path(path, sizeof(path), testcase_dir, "buf.lib") != 0)
         return fail(err, err_sz, "path too long");
     if (parse_buf_lib(path, d, err, err_sz) != 0)
         return -1;
 
-    if (pd_join_path(path, sizeof(path), testcase_dir, "clk_tree.structure") != 0)
-        return fail(err, err_sz, "path too long");
-    if (parse_structure(path, d, err, err_sz) != 0)
+    if (parse_structure(structure_path, d, err, err_sz) != 0)
         return -1;
 
     if (pd_join_path(path, sizeof(path), testcase_dir, "SS_delay.rpt") != 0)

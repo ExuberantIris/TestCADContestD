@@ -53,6 +53,23 @@ double lp_compute_score(double wns_ss, double tns_ss, double wns_ff, double tns_
     return s;
 }
 
+double lp_compute_timing_score(double wns_ss, double tns_ss, double wns_ff, double tns_ff,
+                               double wns_ss_ori, double tns_ss_ori, double wns_ff_ori,
+                               double tns_ff_ori)
+{
+    double s = 0.0;
+    const double tns_ss_p = score_pos_tns(tns_ss);
+    const double wns_ss_p = score_pos_wns(wns_ss);
+    const double tns_ff_p = score_pos_tns(tns_ff);
+    const double wns_ff_p = score_pos_wns(wns_ff);
+
+    s += 1.0 - score_term_ratio(tns_ss_p, score_pos_tns(tns_ss_ori));
+    s += 1.0 - score_term_ratio(wns_ss_p, score_pos_wns(wns_ss_ori));
+    s += 1.0 - score_term_ratio(tns_ff_p, score_pos_tns(tns_ff_ori));
+    s += 1.0 - score_term_ratio(wns_ff_p, score_pos_wns(wns_ff_ori));
+    return s;
+}
+
 void lp_print_metrics(const char *label, const LpMetrics *m)
 {
     std::printf("=== %s ===\n", label);
@@ -60,6 +77,14 @@ void lp_print_metrics(const char *label, const LpMetrics *m)
     std::printf("FF hold  WNS : %.6f  TNS : %.6f\n", m->wns_hold_ff, m->tns_hold_ff);
     std::printf("Total area   : %.6f\n", m->area);
     std::printf("Score (a=b=g=1): %.6f\n", m->score);
+}
+
+void lp_print_timing_metrics(const char *label, const LpMetrics *m)
+{
+    std::printf("=== %s ===\n", label);
+    std::printf("SS setup WNS : %.6f  TNS : %.6f\n", m->wns_setup_ss, m->tns_setup_ss);
+    std::printf("FF hold  WNS : %.6f  TNS : %.6f\n", m->wns_hold_ff, m->tns_hold_ff);
+    std::printf("Score (timing only, no area): %.6f\n", m->score);
 }
 
 int lp_write_result_txt(const char *result_dir, const char *testcase_dir, const LpMetrics *ori,

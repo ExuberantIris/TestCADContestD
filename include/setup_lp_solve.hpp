@@ -7,8 +7,7 @@
 #include "sa_solve.hpp"
 
 /**
- * Setup-only optimizer: build path constraints as a directed graph, run longest-path
- * arrival times, map to branch SS delays, iterate until time limit.
+ * Setup-only: topo-sort ideal FF arrivals, then SA adjusts buffers on worst-gap leaf FFs.
  */
 int setup_longest_path_solve(LpProblem *pb, const PdDesign *d, const LpBufferChainDp *dp_ss,
                              const LpBufferChainDp *dp_ff, const LpSolution *initial,

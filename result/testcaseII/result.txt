@@ -4,12 +4,12 @@ time_limit_sec: 600.0
 sa_phase_limit_sec: 180.0
 lp_init_sec: 0.000
 lp_init_ok: 0
-wall_elapsed_sec: 180.217
-sa_elapsed_sec: 180.004
-sa_iterations: 25019
+wall_elapsed_sec: 45.884
+sa_elapsed_sec: 45.582
+sa_iterations: 11087
 use_second_best: 0
-solver: setup_topo_path(timed_out)
-solver_status: 2
+solver: setup_topo_ff_sa(stall)
+solver_status: 0
 
 === baseline (ori) ===
 SS setup WNS : -0.302000  TNS : -98.697600
@@ -18,7 +18,7 @@ Total area   : 980.414032
 Score (a=b=g=1): 0.000000
 
 === after optimize ===
-SS setup WNS : -0.303000  TNS : -98.605200
-FF hold  WNS : -0.030000  TNS : -0.103600
-Total area   : 965.533232
-Score (a=b=g=1): 0.004157
+SS setup WNS : -0.042000  TNS : -8.039100
+FF hold  WNS : -0.018200  TNS : -0.035300
+Total area   : 1530.612032
+Score (a=b=g=1): 2.827344

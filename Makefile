@@ -28,9 +28,12 @@ UNITTEST_OBJS = $(UNITTEST_SRCS:.cpp=.o)
 PRINT_LP_SRCS = tools/print_lp_input.cpp src/lp_print_input.cpp
 PRINT_LP_OBJS = tools/print_lp_input.o src/lp_print_input.o
 
-.PHONY: all clean unittest print_lp_input
+.PHONY: all clean unittest print_lp_input verify_metrics
 
 all: sa_solver
+
+verify_metrics: $(PD_OBJS) verify/verify_metrics.o src/lp_score.o
+	$(CXX) $(CXXFLAGS) -o verify/verify_metrics $(PD_OBJS) verify/verify_metrics.o src/lp_score.o $(LDFLAGS)
 
 print_lp_input: $(PD_OBJS) $(PRINT_LP_OBJS) src/lp_branch.o src/lp_score.o src/lp_buffer_dp.o src/sa_eval.o
 	$(CXX) $(CXXFLAGS) -o $@ $(PD_OBJS) $(PRINT_LP_OBJS) src/lp_branch.o src/lp_score.o src/lp_buffer_dp.o src/sa_eval.o $(LDFLAGS)
@@ -53,5 +56,8 @@ tools/%.o: tools/%.cpp
 unittest/%.o: unittest/%.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
+verify/%.o: verify/%.cpp
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
 clean:
-	rm -f $(PD_OBJS) $(SA_OBJS) $(UNITTEST_OBJS) $(PRINT_LP_OBJS) sa_solver test_buffer_chain_dp print_lp_input
+	rm -f $(PD_OBJS) $(SA_OBJS) $(UNITTEST_OBJS) $(PRINT_LP_OBJS) verify/verify_metrics.o sa_solver test_buffer_chain_dp print_lp_input verify/verify_metrics

@@ -1,0 +1,8 @@
+testcase_dir: testcase/testcase2
+structure: result/testcaseII_verify/modified_clk_tree.structure
+SS setup WNS : -0.295000
+SS setup TNS : -83.452300
+FF hold  WNS : -0.020400
+FF hold  TNS : -0.057100
+Total area   : 1521.017832
+wall_elapsed_sec: 48.109
