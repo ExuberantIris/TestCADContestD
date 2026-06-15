@@ -1,6 +1,6 @@
 testcase_dir: testcase/testcase4
 original_structure: testcase/testcase4/clk_tree.structure
-modified_structure: result/testcase4/modified_clk_tree.structure
+modified_structure: result/testcase4_archive/modified_clk_tree.structure
 
 === baseline (original clk tree) ===
 SS setup WNS : -0.593800  TNS : -2277.689600
@@ -9,8 +9,8 @@ Total area   : 10539.493920
 Score (a=b=g=1): 0.000000
 
 === after optimize ===
-SS setup WNS : -0.407800  TNS : -1301.081300
-FF hold  WNS : -0.058300  TNS : -0.886800
-Total area   : 20799.805520
-Score (a=b=g=1): 2.136102
-wall_elapsed_sec: 247.095
+SS setup WNS : -0.397800  TNS : -1148.242200
+FF hold  WNS : -0.046600  TNS : -0.631500
+Total area   : 22319.213520
+Score (a=b=g=1): 2.352705
+wall_elapsed_sec: 249.461

@@ -1,6 +1,6 @@
 sa_solver result (multi-phase)
 testcase_dir: testcase/testcase4
-wall_elapsed_sec: 226.913
+wall_elapsed_sec: 228.814
 score_weights: a=0.600000 b=0.200000 g=0.200000
 sa_no_improve_limit: 10000
 
@@ -20,12 +20,12 @@ FF hold  WNS : -0.073200  TNS : -1.343300
 Total area   : 22379.911520
 Score (a=0.6000 b=0.2000 g=0.2000): 0.155022
 
-=== phase-2 hybrid_path_sa ===
-solver: phase2_hybrid_sa(timed_out)
+=== phase-2 batch_sa ===
+solver: phase2_batch_sa(timed_out)
 solver_status: 2
-elapsed_sec: 180.005
-iterations: 10243
-SS setup WNS : -0.407800  TNS : -1301.081300
-FF hold  WNS : -0.058300  TNS : -0.886800
-Total area   : 20808.812320
-Score (a=0.6000 b=0.2000 g=0.2000): 0.279119
+elapsed_sec: 180.013
+iterations: 10826
+SS setup WNS : -0.397800  TNS : -1148.242200
+FF hold  WNS : -0.046600  TNS : -0.631500
+Total area   : 22324.500120
+Score (a=0.6000 b=0.2000 g=0.2000): 0.292743

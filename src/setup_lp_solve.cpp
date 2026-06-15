@@ -3,7 +3,6 @@
 #include "lp_score.hpp"
 #include "pd_clock.h"
 #include "pd_output.h"
-#include "sa_config.hpp"
 #include "sa_eval.hpp"
 #include "sa_params.hpp"
 
@@ -324,7 +323,7 @@ void filter_existing_buf_branches(const LpProblem *pb, const std::vector<int> &r
     }
 }
 
-void build_weighted_violating_paths(const SaPgCtx &ctx, const LpScoreWeights &wt,
+void build_weighted_violating_paths(const SaPgCtx &ctx, const LpScoreWeights &wt, int top_path_pool,
                                     std::vector<int> *pool)
 {
     pool->clear();
@@ -348,7 +347,7 @@ void build_weighted_violating_paths(const SaPgCtx &ctx, const LpScoreWeights &wt
                   return a.second < b.second;
               });
 
-    const int top_n = std::min(SaConfig::kPhase2TopPathPool, static_cast<int>(ranked.size()));
+    const int top_n = std::min(top_path_pool, static_cast<int>(ranked.size()));
     pool->reserve(static_cast<std::size_t>(top_n));
     for (int i = 0; i < top_n; i++)
         pool->push_back(ranked[static_cast<std::size_t>(i)].second);
@@ -407,8 +406,8 @@ bool try_path_directed_move(int path_idx, const SaPgCtx &ctx, const LpProblem *p
 
 bool try_area_recovery_move(const LpProblem *pb, const std::vector<BranchDpOpts> &opts,
                             const std::vector<double> &cur_ss, const std::vector<int> &branch_stall,
-                            int stall_limit, std::mt19937 &rng, std::vector<double> *trial_ss,
-                            int *moved_branch)
+                            int stall_limit, int area_branch_pool, std::mt19937 &rng,
+                            std::vector<double> *trial_ss, int *moved_branch)
 {
     std::vector<std::pair<double, int>> ranked;
     const int n_br = static_cast<int>(pb->branches.size());
@@ -431,8 +430,7 @@ bool try_area_recovery_move(const LpProblem *pb, const std::vector<BranchDpOpts>
                   return a.second < b.second;
               });
 
-    const int top_n =
-        std::min(SaConfig::kPhase2AreaBranchPool, static_cast<int>(ranked.size()));
+    const int top_n = std::min(area_branch_pool, static_cast<int>(ranked.size()));
     const int pick = ranked[static_cast<std::size_t>(
                              std::uniform_int_distribution<int>(0, top_n - 1)(rng))]
                          .second;
@@ -452,8 +450,8 @@ bool try_area_recovery_move(const LpProblem *pb, const std::vector<BranchDpOpts>
 
 bool try_gap_refine_move(const std::vector<double> &target_d_ss, const std::vector<BranchDpOpts> &opts,
                          const LpProblem *pb, const std::vector<double> &cur_ss,
-                         const std::vector<int> &branch_stall, int stall_limit, std::mt19937 &rng,
-                         std::vector<double> *trial_ss, int *moved_branch)
+                         const std::vector<int> &branch_stall, int stall_limit, int leaf_ff_pick_count,
+                         std::mt19937 &rng, std::vector<double> *trial_ss, int *moved_branch)
 {
     std::vector<std::pair<double, int>> ranked;
     const int n_br = static_cast<int>(pb->branches.size());
@@ -476,8 +474,7 @@ bool try_gap_refine_move(const std::vector<double> &target_d_ss, const std::vect
                   return a.second < b.second;
               });
 
-    const int top_k =
-        std::min(SaConfig::kSaLeafFfPickCount, static_cast<int>(ranked.size()));
+    const int top_k = std::min(leaf_ff_pick_count, static_cast<int>(ranked.size()));
     const int b = ranked[static_cast<std::size_t>(
                             std::uniform_int_distribution<int>(0, top_k - 1)(rng))]
                         .second;
@@ -495,30 +492,31 @@ bool try_gap_refine_move(const std::vector<double> &target_d_ss, const std::vect
 
 bool try_hybrid_move(const std::vector<double> &target_d_ss, const SaPgCtx &ctx,
                      const LpProblem *pb, const std::vector<BranchDpOpts> &opts,
-                     const std::vector<int> &branch_stall, int stall_limit,
+                     const std::vector<int> &branch_stall, const SaParams &cfg,
                      const LpScoreWeights &wt, const std::vector<double> &cur_ss,
                      std::mt19937 &rng, std::vector<double> *trial_ss, int *moved_branch)
 {
     std::vector<int> viol_paths;
-    build_weighted_violating_paths(ctx, wt, &viol_paths);
+    build_weighted_violating_paths(ctx, wt, cfg.phase2_top_path_pool, &viol_paths);
 
     *trial_ss = cur_ss;
     *moved_branch = -1;
 
     if (!viol_paths.empty() &&
-        std::uniform_real_distribution<double>(0.0, 1.0)(rng) < SaConfig::kPhase2PathMoveProb) {
+        std::uniform_real_distribution<double>(0.0, 1.0)(rng) < cfg.phase2_path_move_prob) {
         const int path_idx = viol_paths[static_cast<std::size_t>(
             std::uniform_int_distribution<int>(0, static_cast<int>(viol_paths.size()) - 1)(rng))];
-        if (try_path_directed_move(path_idx, ctx, pb, opts, branch_stall, stall_limit, rng,
-                                   trial_ss, moved_branch))
+        if (try_path_directed_move(path_idx, ctx, pb, opts, branch_stall, cfg.sa_branch_no_improve_limit,
+                                   rng, trial_ss, moved_branch))
             return true;
     }
 
-    if (try_area_recovery_move(pb, opts, cur_ss, branch_stall, stall_limit, rng, trial_ss,
-                               moved_branch))
+    if (try_area_recovery_move(pb, opts, cur_ss, branch_stall, cfg.sa_branch_no_improve_limit,
+                               cfg.phase2_area_branch_pool, rng, trial_ss, moved_branch))
         return true;
 
-    return try_gap_refine_move(target_d_ss, opts, pb, cur_ss, branch_stall, stall_limit, rng,
+    return try_gap_refine_move(target_d_ss, opts, pb, cur_ss, branch_stall,
+                               cfg.sa_branch_no_improve_limit, cfg.sa_leaf_ff_pick_count, rng,
                                trial_ss, moved_branch);
 }
 
@@ -1012,7 +1010,7 @@ int seg_tree_sa_solve(LpProblem *pb, const PdDesign *d, const LpBufferChainDp *d
     std::uniform_real_distribution<double> uni01(0.0, 1.0);
 
     const Clock::time_point t0 = Clock::now();
-    double temperature = SaConfig::kSaTemperatureInit;
+    double temperature = params.sa_temperature_init;
     int no_improve_iters = 0;
     int stalled = 0;
     const int batch_sz = params.sa_batch_size;
@@ -1026,9 +1024,8 @@ int seg_tree_sa_solve(LpProblem *pb, const PdDesign *d, const LpBufferChainDp *d
 
                 std::vector<double> trial_ss;
                 int moved_branch = -1;
-                if (!try_hybrid_move(target_d_ss, ctx, pb, opts, branch_stall,
-                                     SaConfig::kSaBranchNoImproveLimit, wt, cur_ss, rng,
-                                     &trial_ss, &moved_branch))
+                if (!try_hybrid_move(target_d_ss, ctx, pb, opts, branch_stall, params, wt, cur_ss,
+                                     rng, &trial_ss, &moved_branch))
                     continue;
 
                 cur_ss = std::move(trial_ss);
@@ -1061,9 +1058,8 @@ int seg_tree_sa_solve(LpProblem *pb, const PdDesign *d, const LpBufferChainDp *d
 
             std::vector<double> trial_ss;
             int moved_branch = -1;
-            const bool moved = try_hybrid_move(target_d_ss, ctx, pb, opts, branch_stall,
-                                               SaConfig::kSaBranchNoImproveLimit, wt, cur_ss,
-                                               rng, &trial_ss, &moved_branch);
+            const bool moved = try_hybrid_move(target_d_ss, ctx, pb, opts, branch_stall, params, wt,
+                                               cur_ss, rng, &trial_ss, &moved_branch);
 
             if (!moved || moved_branch < 0) {
                 no_improve_iters++;
@@ -1110,9 +1106,9 @@ int seg_tree_sa_solve(LpProblem *pb, const PdDesign *d, const LpBufferChainDp *d
                 }
             }
 
-            temperature *= SaConfig::kSaTemperatureDecay;
-            if (temperature < SaConfig::kSaTemperatureFloor)
-                temperature = SaConfig::kSaTemperatureInit;
+            temperature *= params.sa_temperature_decay;
+            if (temperature < params.sa_temperature_floor)
+                temperature = params.sa_temperature_init;
         }
     }
 

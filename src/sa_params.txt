@@ -1,0 +1,32 @@
+# Solver parameters (read at startup from src/sa_params.txt)
+
+# --- Time limits (seconds) ---
+total_time_limit_sec=600
+sa_time_limit_sec=180
+
+# --- Phase-2 SA stopping / batching ---
+no_improve_limit=10000
+# Batch SA: moves per batch (always accept within batch; 0 = Metropolis hybrid mode).
+sa_batch_size=20
+
+# --- SA move heuristics ---
+sa_leaf_ff_pick_count=40
+sa_branch_no_improve_limit=1000
+
+# --- Metropolis (used when sa_batch_size=0) ---
+sa_temperature_init=1.0
+sa_temperature_decay=0.9995
+sa_temperature_floor=0.0001
+
+# --- Phase-2 hybrid move probabilities / pools ---
+phase2_path_move_prob=0.85
+phase2_top_path_pool=20
+phase2_area_branch_pool=24
+
+# --- Buffer-chain DP ---
+dp_delay_margin=0.02
+
+# --- Competition score weights (a + b + g = 1): TNS, WNS, Area ---
+score_a=0.6
+score_b=0.2
+score_g=0.2

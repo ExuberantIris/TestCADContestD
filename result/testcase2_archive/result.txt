@@ -1,6 +1,6 @@
 sa_solver result (multi-phase)
 testcase_dir: testcase/testcase2
-wall_elapsed_sec: 49.811
+wall_elapsed_sec: 47.810
 score_weights: a=0.600000 b=0.200000 g=0.200000
 sa_no_improve_limit: 10000
 
@@ -23,9 +23,9 @@ Score (a=0.6000 b=0.2000 g=0.2000): 0.303915
 === phase-2 batch_sa ===
 solver: phase2_batch_sa(stall)
 solver_status: 0
-elapsed_sec: 49.512
-iterations: 58580
-SS setup WNS : -0.229000  TNS : -48.861800
-FF hold  WNS : 0.001400  TNS : 0.000000
-Total area   : 1919.666632
-Score (a=0.6000 b=0.2000 g=0.2000): 0.384049
+elapsed_sec: 47.504
+iterations: 52840
+SS setup WNS : -0.222000  TNS : -42.281700
+FF hold  WNS : 0.005100  TNS : 0.000000
+Total area   : 1989.175632
+Score (a=0.6000 b=0.2000 g=0.2000): 0.392188

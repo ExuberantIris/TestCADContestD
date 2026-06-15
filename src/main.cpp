@@ -3,14 +3,12 @@
 #include "lp_types.hpp"
 #include "pd_output.h"
 #include "sa_apply.hpp"
-#include "sa_config.hpp"
 #include "sa_eval.hpp"
 #include "sa_params.hpp"
 #include "sa_solve.hpp"
 #include "setup_lp_solve.hpp"
 
 #include <chrono>
-#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <sys/stat.h>
@@ -23,29 +21,6 @@ using Clock = std::chrono::steady_clock;
 double elapsed_sec(const Clock::time_point &t0)
 {
     return std::chrono::duration<double>(Clock::now() - t0).count();
-}
-
-void read_time_limit(LpProblem *pb)
-{
-    const char *env = std::getenv("SA_TIME_LIMIT");
-    if (!env || !env[0])
-        env = std::getenv("LP_TIME_LIMIT");
-    if (env && env[0]) {
-        const double t = std::atof(env);
-        if (t > 0.1)
-            pb->time_limit_sec = t;
-    }
-}
-
-double read_sa_limit()
-{
-    const char *env = std::getenv("SETUP_SA_TIME_LIMIT");
-    if (env && env[0]) {
-        const double t = std::atof(env);
-        if (t > 0.1)
-            return t;
-    }
-    return SaConfig::kSaTimeLimitSec;
 }
 
 void metrics_from_ctx(const LpProblem *pb, const SaPgCtx &ctx, const LpScoreWeights &wt,
@@ -84,19 +59,21 @@ int main(int argc, char **argv)
     }
 
     testcase_dir = argv[1];
-    sa_params_load(&sa_params, "text/sa_params.txt");
+    sa_params_load(&sa_params, kSaParamsPath);
 
     lp_problem_init(&problem);
-    read_time_limit(&problem);
+    problem.time_limit_sec = sa_params.total_time_limit_sec;
     if (problem.time_limit_sec <= 0.0)
         problem.time_limit_sec = 600.0;
 
     const double total_limit = problem.time_limit_sec;
-    const double sa_limit = read_sa_limit();
+    const double sa_limit =
+        sa_params.sa_time_limit_sec > 0.0 ? sa_params.sa_time_limit_sec : 180.0;
     const LpScoreWeights &wt = sa_params.score_weights;
 
     std::printf("=== sa_solver (seg-tree direct + SA) ===\n");
     std::printf("Input folder: %s\n", testcase_dir);
+    std::printf("Params file : %s\n", kSaParamsPath);
     std::printf("Total limit : %.1f sec | SA phase: %.1f sec\n", total_limit, sa_limit);
     std::printf("Score weights: a=%.4f b=%.4f g=%.4f | no_improve_limit=%d | sa_batch_size=%d\n",
                 wt.a, wt.b, wt.g, sa_params.no_improve_limit, sa_params.sa_batch_size);
@@ -117,7 +94,7 @@ int main(int argc, char **argv)
         dp_max_delay = std::max(dp_max_delay, br.d_ss_max);
         dp_max_delay = std::max(dp_max_delay, br.d_ff_max);
     }
-    dp_max_delay = std::min(LpBufferChainDp::kMaxDelay, dp_max_delay + 0.02);
+    dp_max_delay = std::min(LpBufferChainDp::kMaxDelay, dp_max_delay + sa_params.dp_delay_margin);
     std::printf("DP max delay: %.4f\n", dp_max_delay);
 
     if (dp_ss.build(&design, LpBufferDpCorner::SS, dp_max_delay) != 0 ||
