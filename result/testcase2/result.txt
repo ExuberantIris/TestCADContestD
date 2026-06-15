@@ -2,11 +2,11 @@ sa_solver_prime result
 testcase_dir: testcase/testcase2
 time_limit_sec: 600.0
 sa_phase_limit_sec: 0.1
-lp_init_sec: 30.041
+lp_init_sec: 30.056
 lp_init_ok: 1
-wall_elapsed_sec: 571.129
-sa_elapsed_sec: 0.110
-sa_iterations: 195
+wall_elapsed_sec: 238.482
+sa_elapsed_sec: 0.112
+sa_iterations: 136
 use_second_best: 0
 solver: path_heap_sa(timed_out)
 solver_status: 2
@@ -24,7 +24,7 @@ Total area   : 980.414032
 Score (a=b=g=1): 1.157010
 
 === after optimize ===
-SS setup WNS : -0.303000  TNS : -91.212800
-FF hold  WNS : -0.028000  TNS : -0.099700
-Total area   : 956.134832
-Score (a=b=g=1): 0.193475
+SS setup WNS : -0.303000  TNS : -103.323900
+FF hold  WNS : -0.035200  TNS : -0.130100
+Total area   : 955.743232
+Score (a=b=g=1): -0.464450
