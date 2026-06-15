@@ -1,0 +1,80 @@
+Phase-2 Hybrid SA 策略與實作
+==============================
+
+## 背景
+
+Phase-1 `seg_tree_direct` 已把每條 branch 的 `d_ss` 設成 segment-tree target。
+若 Phase-2 只做「往 target 靠攏」的 gap SA，離散 buffer 上常無步可走，best score 無法再進步。
+
+Phase-2 的任務是修正 Phase-1 無法處理的部分：
+
+- 離散 cell 與連續 target 的落差
+- 多條 timing path 之間的耦合（單靠 sibling 平衡不足）
+- 在加權 score（a=0.6 TNS, b=0.2 WNS, g=0.2 Area）下做細部調整
+
+## 策略總覽：`phase2_hybrid_sa`
+
+每一輪 SA 依序嘗試三種 move，成功產生 trial 即進入 Metropolis 接受：
+
+| 優先 | Move 類型 | 觸發條件 | 動作 |
+|------|-----------|----------|------|
+| 1 | Path-directed | 有 violating path 且 rand < 0.85 | 見下節 |
+| 2 | Area recovery | 上一種失敗 | 高 delay branch 試 `next_lower` |
+| 3 | Gap refine | 仍失敗 | 依 segment-tree target 做離散步進 |
+
+評分與 verify 一致：`sa_eval_state` 用 DP 解析後真實 cell delay（見 `implement.txt`）。
+
+## 1. Path-directed move（主力）
+
+1. 對每條 path 算加權違規量：
+   `w = a × max(0,-slack_ss) + b × max(0,-slack_ff)`
+2. 取 w 最大的前 20 條 path 為候選池，均勻隨機選一條。
+3. 若同時 setup/hold 違規，75% 機率優先修 setup（呼應 a > b）。
+4. Setup 違規：在 **capture FF → root** 的 ExistingBuf 邊上，隨機選一條，`d_ss = next_higher`。
+5. Hold 違規：在 **launch FF → root** 的 ExistingBuf 邊上，`d_ss = next_lower`。
+6. Insertable（parent→FF）邊不動（結構上不插入 buffer，計入 timing 也為 0）。
+
+直覺：加大 capture 側 clock delay → setup slack 改善 → TNS 上升；減小 launch 側 delay → hold 改善。
+
+## 2. Area recovery move
+
+當 path move 無法執行（無違規或邊已黑名單）時：
+
+1. 在所有可動 ExistingBuf 中，依目前 `d_ss` 由高到低排序。
+2. 取前 24 條隨機選一，嘗試 `next_lower`（換較小 buffer）。
+3. 若加權 score 變好（或 Metropolis 接受），可降 area 項貢獻。
+
+## 3. Gap refine move（備援）
+
+仍失敗時，沿用 segment-tree target：
+
+1. 算 `|target_d_ss[b] - cur_ss[b]|`，取 gap 最大的前 40 條 branch。
+2. 隨機選一，在離散 `ss_delays` 上 `snap_toward_target` 一步。
+
+用於離散化後與 target 仍有小偏差的邊。
+
+## 接受與停止
+
+- **Metropolis**：以 `lp_compute_weighted_score`（a/b/g 來自 `text/sa_params.txt`）為純量目標；變好必接受，變差以 `exp(Δ/T)` 機率接受。
+- **溫度**：T₀=1.0，每輪 ×0.9995，低於 1e-4 重置。
+- **Branch blacklist**：單邊連續 1000 次未改善 best → 暫停調整該邊。
+- **全域停止**：連續 `no_improve_limit`（預設 10000）輪 best score 未改善 → `phase2_hybrid_sa(stall)`。
+
+## 實作位置
+
+| 檔案 | 內容 |
+|------|------|
+| `src/setup_lp_solve.cpp` | `seg_tree_sa_solve()`：三種 move + SA 主迴圈 |
+| `include/sa_config.hpp` | `kPhase2PathMoveProb`, `kPhase2TopPathPool`, `kPhase2AreaBranchPool` |
+| `src/sa_eval.cpp` | `sa_path_branches_capture/launch`、與 verify 一致的 timing |
+| `text/sa_params.txt` | `no_improve_limit`, score 權重 |
+
+## 與 Phase-1 的銜接
+
+```
+Phase-1 seg_tree_direct  → 初值 cur_ss (= target_d_ss)
+Phase-2 hybrid SA        → 以 cur_ss 為起點，path/area/gap 微調
+sa_apply_solution        → 寫入 modified_clk_tree.structure
+```
+
+Solver 名稱：`phase2_hybrid_sa` / `phase2_hybrid_sa(stall)` / `phase2_hybrid_sa(timed_out)`。

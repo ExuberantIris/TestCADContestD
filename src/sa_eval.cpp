@@ -33,6 +33,51 @@ static double branch_area_dp(const LpBranch &br, double d_ss, double d_ff, const
     return a > 0.0 ? a : br.area_per_ss;
 }
 
+/** Fanout used for cell delay on structure (buffer node's own children count). */
+static int branch_buf_fanout(const PdDesign *d, const LpBranch &br)
+{
+    if (br.kind != LpBranchKind::ExistingBuf)
+        return 1;
+    const PdNode *n = &d->nodes[br.child_node];
+    return n->nchildren > 0 ? n->nchildren : 1;
+}
+
+/** Resolved SS delay on one branch after DP → single buffer cell (matches sa_apply / pd_annotate_clock). */
+static double branch_resolved_ss_delay(const LpBranch &br, double d_ss, const PdDesign *d,
+                                       const LpBufferChainDp *dp_ss)
+{
+    if (br.kind == LpBranchKind::Insertable)
+        return 0.0;
+
+    const int delay_fo = branch_buf_fanout(d, br);
+    const LpBufferChainEntry &ent = dp_ss->lookup(br.fanout, d_ss);
+    if (ent.reachable && !ent.cell_indices.empty()) {
+        const PdCell *c = &d->cells[ent.cell_indices.back()];
+        return lp_eval_branch_delay_ss(d, c, delay_fo);
+    }
+    if (br.cell_idx >= 0)
+        return lp_eval_branch_delay_ss(d, &d->cells[br.cell_idx], delay_fo);
+    return d_ss;
+}
+
+/** Resolved FF hold delay: same buffer cell as SS side (matches sa_apply). */
+static double branch_resolved_ff_delay(const LpBranch &br, double d_ss, const PdDesign *d,
+                                       const LpBufferChainDp *dp_ss)
+{
+    if (br.kind == LpBranchKind::Insertable)
+        return 0.0;
+
+    const int delay_fo = branch_buf_fanout(d, br);
+    const LpBufferChainEntry &ent = dp_ss->lookup(br.fanout, d_ss);
+    if (ent.reachable && !ent.cell_indices.empty()) {
+        const PdCell *c = &d->cells[ent.cell_indices.back()];
+        return lp_eval_branch_delay_ff(d, c, delay_fo);
+    }
+    if (br.cell_idx >= 0)
+        return lp_eval_branch_delay_ff(d, &d->cells[br.cell_idx], delay_fo);
+    return 0.0;
+}
+
 bool sa_build_ctx(const LpProblem *pb, const PdDesign *d, SaPgCtx *ctx)
 {
     const int n_ff = static_cast<int>(pb->ff_node_ids.size());
@@ -199,8 +244,11 @@ void sa_eval_state(const LpProblem *pb, const PdDesign *d, const std::vector<dou
         for (int k = ctx->ff_path_off[static_cast<std::size_t>(f)];
              k < ctx->ff_path_off[static_cast<std::size_t>(f + 1)]; k++) {
             const int b = ctx->ff_path_br[static_cast<std::size_t>(k)];
-            ctx->T_ss[static_cast<std::size_t>(f)] += d_ss[static_cast<std::size_t>(b)];
-            ctx->T_ff[static_cast<std::size_t>(f)] += d_ff[static_cast<std::size_t>(b)];
+            const LpBranch &br = pb->branches[static_cast<std::size_t>(b)];
+            ctx->T_ss[static_cast<std::size_t>(f)] +=
+                branch_resolved_ss_delay(br, d_ss[static_cast<std::size_t>(b)], d, dp_ss);
+            ctx->T_ff[static_cast<std::size_t>(f)] +=
+                branch_resolved_ff_delay(br, d_ss[static_cast<std::size_t>(b)], d, dp_ss);
         }
     }
 

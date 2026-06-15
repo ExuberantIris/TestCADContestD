@@ -26,6 +26,7 @@ set(SA_SOURCES
     src/lp_score.cpp
     src/lp_buffer_dp.cpp
     src/sa_eval.cpp
+    src/sa_params.cpp
     src/setup_lp_solve.cpp
     src/sa_apply.cpp
 )

@@ -1,0 +1,10 @@
+# SA phase-2 parameters (read at solver startup)
+# Path: text/sa_params.txt (relative to ProblemD project root)
+
+# Stop after this many consecutive SA iterations with no best-score improvement.
+no_improve_limit=10000
+
+# Competition score weights (a + b + g = 1): TNS, WNS, Area
+score_a=0.6
+score_b=0.2
+score_g=0.2

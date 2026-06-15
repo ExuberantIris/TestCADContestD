@@ -16,7 +16,3 @@ Environment:
 
 Timed test (testcase1 & 2):
   bash scripts/run_timed_tc12.sh
-
-Dump LP input (example testcase1 -> result/print_lp_1):
-  make print_lp_input
-  ./print_lp_input testcase/testcase1 result/print_lp_1

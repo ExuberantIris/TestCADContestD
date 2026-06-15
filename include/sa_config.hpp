@@ -10,7 +10,7 @@ inline constexpr double kSaTimeLimitSec = 180.0;
 inline constexpr int kSaLeafFfPickCount = 40;
 
 /** Consecutive SA iterations without timing-score improvement before stopping (N). */
-inline constexpr int kSaNoImproveLimit = 1000;
+inline constexpr int kSaNoImproveLimit = 10000;
 
 /** Per-branch moves without timing-score improvement before blacklisting. */
 inline constexpr int kSaBranchNoImproveLimit = 1000;
@@ -23,5 +23,14 @@ inline constexpr double kSaTemperatureDecay = 0.9995;
 
 /** Reset temperature to init when it drops below this value. */
 inline constexpr double kSaTemperatureFloor = 1e-4;
+
+/** Phase-2: probability of path-directed move when violations exist. */
+inline constexpr double kPhase2PathMoveProb = 0.85;
+
+/** Phase-2: pick a violating path from the top-N worst (by weighted slack). */
+inline constexpr int kPhase2TopPathPool = 20;
+
+/** Phase-2: pick area-reduction branch from top-N highest delay. */
+inline constexpr int kPhase2AreaBranchPool = 24;
 
 } // namespace SaConfig

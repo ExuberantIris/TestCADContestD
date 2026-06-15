@@ -1,0 +1,118 @@
+ProblemD sa_solver 實作說明
+==========================
+
+## 總覽
+
+`sa_solver` 採兩階段流程：
+
+1. **Phase-1 `seg_tree_direct`**：依 timing path 建立 pseudo-DAG，計算每顆 FF 的 ideal arrival，再在 clock tree 上做 bottom-up segment tree，直接輸出每條 branch 的 SS target delay。
+2. **Phase-2 `seg_tree_sa`**：以 Phase-1 解為初值，用 Simulated Annealing 微調 branch SS delay，使其逼近 segment-tree target，並以加權競賽分數作為接受準則。
+
+最終以 Phase-2 的 delay 經 `sa_apply_solution` 寫入 `modified_clk_tree.structure`。
+
+## Phase-1：Segment tree 直接指派
+
+### 1.1 記錄原始 FF clock delay
+
+在 `lp_build_from_design` 後，快照每顆 FF 的 `d_clk_ss` 至 `ori_ff_clk[]`，並輸出 `ff_ori_clk_delay.txt`。
+
+### 1.2 Ideal FF arrival（pseudo-DAG longest path）
+
+- 從 `SS_delay.rpt` 的 path 建邊：`launch_FF → capture_FF`，權重為 `data_ss + t_setup - clock_period`。
+- **Topology order**：ready 節點中，FF 依 `ori_ff_clk` 升序優先；非 FF 節點優先處理。
+- Longest-path relaxation 得到 `ideal_arrival[]`。
+
+### 1.3 Bottom-up segment tree targets
+
+對 clock tree post-order 走訪；兄弟子節點依 subtree 內最小 FF 原始 delay 排序。
+
+對 parent 的 sibling `a, b, ...`，令 `M = max(子節點需求)`，則：
+
+    target_d_ss[parent→v] = M - req[v]
+
+子節點為 FF 時 `req = ideal_arrival`；否則為 subtree max。
+
+Phase-1 直接令 `solution.d_ss = target_d_ss`（不做 SA）。
+
+## Phase-2：Segment-tree SA
+
+初值：Phase-1 的 `d_ss`（`d_ff` 沿用原 tree）。
+
+每輪迭代：
+
+1. 對每條 branch `b` 計算 `gap[b] = target_d_ss[b] - cur_ss[b]`。
+2. 取 `|gap|` 最大的 K 條（`K = 40`，見 `sa_config.hpp`）為候選；略過 branch blacklist（連續 1000 次無 best 改善）。
+3. 隨機選一條 branch，以 `snap_toward_target` 在離散 cell delay 上往 target 靠近一步。
+4. **Metropolis 接受**：以加權 score 計算 `delta`；變好必接受，變差以 `exp(delta/T)` 機率接受。
+5. 維護歷史 best 解。
+6. **停止條件**：連續 `no_improve_limit` 次迭代 best score 未改善（預設 10000，可於 `text/sa_params.txt` 調整）；或 SA 時限用盡。
+
+溫度：`T0=1.0`，每輪 `×0.9995`，低於 `1e-4` 重置為 `T0`。
+
+## 評分（SA 目標）
+
+加權競賽分數（`lp_compute_weighted_score`）：
+
+    Score = a × (TNS_SS項 + TNS_FF項)/2
+          + b × (WNS_SS項 + WNS_FF項)/2
+          + g × Area項
+
+每項為 `1 - (改善後正值 / 原始正值)`。預設權重（`text/sa_params.txt`）：
+
+- `a = 0.6`（TNS）
+- `b = 0.2`（WNS）
+- `g = 0.2`（Area）
+
+Timing 評估與 verify 一致：FF clock arrival 由每條 ExistingBuf 邊上 DP 選出的 cell，以**該 buffer 節點 downstream fanout**（`child.nchildren`）查 `buf.lib` 延遲後加總；Insertable（parent→FF）邊不計入（`sa_apply` 不插入）。DP lookup 仍用 branch.fanout（parent 分岔數）選 cell，與 `sa_apply` 相同。
+
+## 設定檔 `text/sa_params.txt`
+
+| 鍵 | 說明 | 預設 |
+|----|------|------|
+| `no_improve_limit` | 連續多少輪 score 不變則停止 SA | 10000 |
+| `score_a` | TNS 權重 | 0.6 |
+| `score_b` | WNS 權重 | 0.2 |
+| `score_g` | Area 權重 | 0.2 |
+
+## 輸出
+
+執行：`./sa_solver <testcase_dir> [result_dir]`
+
+| 檔案 | 內容 |
+|------|------|
+| `modified_clk_tree.structure` | Phase-2 SA 後的 clock tree |
+| `result.txt` | baseline + phase-1 + phase-2 指標（同一檔案） |
+| `ff_ori_clk_delay.txt` | 各 FF 原始 clock delay 與 topo rank |
+| `buffer_clock.txt` | Segment tree 邏輯節點延遲 |
+| `delay_compare.txt` | 實際 clock tree vs segment tree 延遲比較 |
+
+`result.txt` 範例結構：
+
+    baseline (ori)
+    === phase-1 seg_tree_direct ===
+    === phase-2 seg_tree_sa ===
+
+## 環境變數
+
+- `SA_TIME_LIMIT` / `LP_TIME_LIMIT`：總時限（預設 600s）
+- `SETUP_SA_TIME_LIMIT`：Phase-2 SA 預算（預設 180s，且不超過剩餘總時限）
+
+## 主要原始碼
+
+| 檔案 | 職責 |
+|------|------|
+| `src/main.cpp` | 兩階段編排、寫出 result.txt |
+| `src/setup_lp_solve.cpp` | Phase-1/2、segment tree、SA、分析輸出 |
+| `src/sa_eval.cpp` | Timing 前綴和、slack、area |
+| `src/sa_apply.cpp` | Delay → buffer cell |
+| `src/lp_score.cpp` | 加權評分、`result.txt` |
+| `src/sa_params.cpp` | 讀取 `text/sa_params.txt` |
+| `include/sa_config.hpp` | SA 溫度、K、branch blacklist 等常數 |
+
+## 驗證
+
+```bash
+bash scripts/run_and_verify.sh testcase/testcase2 result/testcase2
+```
+
+`verify/verify_metrics` 從 structure 重算 WNS/TNS（verify 仍用 timing-only 等權分數；SA 內部用加權分數）。

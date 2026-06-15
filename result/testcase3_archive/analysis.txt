@@ -9,8 +9,8 @@ Total area   : 2784.190560
 Score (a=b=g=1): 0.000000
 
 === after optimize ===
-SS setup WNS : -0.378900  TNS : -223.877700
+SS setup WNS : -0.378900  TNS : -222.557800
 FF hold  WNS : -0.031600  TNS : -0.078700
-Total area   : 5935.004160
-Score (a=b=g=1): 2.207029
-wall_elapsed_sec: 2.306
+Total area   : 5934.612560
+Score (a=b=g=1): 2.210556
+wall_elapsed_sec: 39.835
