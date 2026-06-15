@@ -11,4 +11,4 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
                    const PdDesign *d, const LpBufferChainDp *dp_ss,
                    const LpBufferChainDp *dp_ff, const LpSolution *lp_init,
                    const LpMetrics *lp_init_metrics, double time_limit_sec, char *err,
-                   std::size_t err_sz);
+                   std::size_t err_sz, int max_passes);

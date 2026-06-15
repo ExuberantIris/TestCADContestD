@@ -6,6 +6,8 @@ LDFLAGS = -lm
 TESTCASE_DIR ?= testcase
 RESULT_DIR ?= result
 SA_PHASE_TIME_LIMIT ?= 0.11
+GREEDY_TIME_LIMIT ?= 540.0
+GREEDY_ITERATIONS ?= 10
 TESTCASE ?= all
 TC ?= $(TESTCASE)
 TESTCASES := $(notdir $(wildcard $(TESTCASE_DIR)/testcase*))
@@ -54,17 +56,17 @@ run: sa_solver
 			exit 1; \
 		fi; \
 		mkdir -p "$(RESULT_DIR)/$$tc"; \
-		echo "==> Running $$tc -> $(RESULT_DIR)/$$tc (SA_PHASE_TIME_LIMIT=$(SA_PHASE_TIME_LIMIT))"; \
-		SA_PHASE_TIME_LIMIT=$(SA_PHASE_TIME_LIMIT) ./sa_solver "$(TESTCASE_DIR)/$$tc" "$(RESULT_DIR)/$$tc"; \
+		echo "==> Running $$tc -> $(RESULT_DIR)/$$tc (SA_PHASE_TIME_LIMIT=$(SA_PHASE_TIME_LIMIT) GREEDY_TIME_LIMIT=$(GREEDY_TIME_LIMIT) GREEDY_ITERATIONS=$(GREEDY_ITERATIONS))"; \
+		SA_PHASE_TIME_LIMIT=$(SA_PHASE_TIME_LIMIT) GREEDY_TIME_LIMIT=$(GREEDY_TIME_LIMIT) GREEDY_ITERATIONS=$(GREEDY_ITERATIONS) ./sa_solver "$(TESTCASE_DIR)/$$tc" "$(RESULT_DIR)/$$tc"; \
 	fi
 
 run-all: sa_solver
 	@set -e; \
-	echo "Using SA_PHASE_TIME_LIMIT=$(SA_PHASE_TIME_LIMIT)"; \
+	echo "Using SA_PHASE_TIME_LIMIT=$(SA_PHASE_TIME_LIMIT) GREEDY_TIME_LIMIT=$(GREEDY_TIME_LIMIT) GREEDY_ITERATIONS=$(GREEDY_ITERATIONS)"; \
 	for tc in $(TESTCASES); do \
 		mkdir -p "$(RESULT_DIR)/$$tc"; \
 		echo "==> Running $$tc -> $(RESULT_DIR)/$$tc"; \
-		SA_PHASE_TIME_LIMIT=$(SA_PHASE_TIME_LIMIT) ./sa_solver "$(TESTCASE_DIR)/$$tc" "$(RESULT_DIR)/$$tc"; \
+		SA_PHASE_TIME_LIMIT=$(SA_PHASE_TIME_LIMIT) GREEDY_TIME_LIMIT=$(GREEDY_TIME_LIMIT) GREEDY_ITERATIONS=$(GREEDY_ITERATIONS) ./sa_solver "$(TESTCASE_DIR)/$$tc" "$(RESULT_DIR)/$$tc"; \
 	done
 
 print_lp_input: $(PD_OBJS) $(PRINT_LP_OBJS) src/lp_branch.o src/lp_score.o src/lp_buffer_dp.o src/sa_eval.o

@@ -21,7 +21,7 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
                    const PdDesign *d, const LpBufferChainDp *dp_ss,
                    const LpBufferChainDp *dp_ff, const LpSolution *lp_init,
                    const LpMetrics *lp_init_metrics, double time_limit_sec, char *err,
-                   std::size_t err_sz)
+                   std::size_t err_sz, int max_passes)
 {
     // debug: write entry marker
     {
@@ -74,9 +74,9 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
 
     bool improved = true;
     int passes = 0;
-    const int max_passes = 5;
+    const int actual_max_passes = std::max(1, max_passes);
 
-    while (improved && passes < max_passes && elapsed_sec(t0) < time_limit_sec) {
+    while (improved && passes < actual_max_passes && elapsed_sec(t0) < time_limit_sec) {
         improved = false;
         passes++;
         const int n_br = static_cast<int>(pb->branches.size());
@@ -157,12 +157,45 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
     greedy_m.area = ctx.area;
     greedy_m.score = ctx.score;
 
-    // write out result_postlp_greedy.txt in result_dir
+    // write out result_postlp_greedy_<iters>_t<time>.txt in result_dir
+    char time_label[32];
+    if (std::fabs(time_limit_sec - std::round(time_limit_sec)) < 1e-6)
+        std::snprintf(time_label, sizeof(time_label), "%.0f", time_limit_sec);
+    else
+        std::snprintf(time_label, sizeof(time_label), "%.1f", time_limit_sec);
+    for (char *p = time_label; *p; ++p) {
+        if (*p == '.')
+            *p = 'p';
+    }
+
+    char basename[128];
+    std::snprintf(basename, sizeof(basename), "result_postlp_greedy_it%d_t%s.txt",
+                  max_passes, time_label);
     char path[1024];
-    if (pd_join_path(path, sizeof(path), result_dir, "result_postlp_greedy.txt") != 0) {
+    if (pd_join_path(path, sizeof(path), result_dir, basename) != 0) {
         if (err && err_sz > 0)
             std::snprintf(err, err_sz, "result path too long");
         return -1;
+    }
+
+    int suffix = 1;
+    while (true) {
+        FILE *f = std::fopen(path, "r");
+        if (!f)
+            break;
+        std::fclose(f);
+        if (std::snprintf(basename, sizeof(basename), "result_postlp_greedy_it%d_t%s_%d.txt",
+                          max_passes, time_label, suffix) >= (int)sizeof(basename)) {
+            if (err && err_sz > 0)
+                std::snprintf(err, err_sz, "result basename too long");
+            return -1;
+        }
+        if (pd_join_path(path, sizeof(path), result_dir, basename) != 0) {
+            if (err && err_sz > 0)
+                std::snprintf(err, err_sz, "result path too long");
+            return -1;
+        }
+        suffix++;
     }
 
     FILE *fp = std::fopen(path, "w");
@@ -174,7 +207,8 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
 
     std::fprintf(fp, "greedy_postlp result\n");
     std::fprintf(fp, "testcase_dir: %s\n", testcase_dir);
-    std::fprintf(fp, "time_limit_sec: %.1f\n", pb->time_limit_sec);
+    std::fprintf(fp, "time_limit_sec: %.1f\n", time_limit_sec);
+    std::fprintf(fp, "greedy_max_passes: %d\n", max_passes);
     std::fprintf(fp, "lp_init_ok: 1\n");
     std::fprintf(fp, "greedy_elapsed_sec: %.3f\n", elapsed_sec(t0));
     std::fprintf(fp, "solver: greedy_post_lp\n");

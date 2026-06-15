@@ -2,9 +2,9 @@ sa_solver_prime result
 testcase_dir: testcase/testcase_basic
 time_limit_sec: 600.0
 sa_phase_limit_sec: 0.1
-lp_init_sec: 30.002
+lp_init_sec: 30.000
 lp_init_ok: 1
-wall_elapsed_sec: 30.042
+wall_elapsed_sec: 30.033
 sa_elapsed_sec: 0.000
 sa_iterations: 1
 use_second_best: 0

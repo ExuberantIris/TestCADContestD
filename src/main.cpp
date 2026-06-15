@@ -48,6 +48,28 @@ static double read_sa_phase_limit()
     return 510.0; /* 8 min 30 sec */
 }
 
+static double read_greedy_time_limit()
+{
+    const char *env = std::getenv("GREEDY_TIME_LIMIT");
+    if (env && env[0]) {
+        const double t = std::atof(env);
+        if (t > 0.1)
+            return t;
+    }
+    return 540.0; /* 9 min */
+}
+
+static int read_greedy_iterations()
+{
+    const char *env = std::getenv("GREEDY_ITERATIONS");
+    if (env && env[0]) {
+        const int v = std::atoi(env);
+        if (v > 0)
+            return v;
+    }
+    return 10;
+}
+
 int main(int argc, char **argv)
 {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
@@ -76,11 +98,14 @@ int main(int argc, char **argv)
     const double total_limit = problem.time_limit_sec;
     const double lp_init_limit = read_lp_init_limit();
     const double sa_phase_limit = read_sa_phase_limit();
+    const double greedy_time_limit = read_greedy_time_limit();
+    const int greedy_iterations = read_greedy_iterations();
 
     std::printf("=== sa_solver (ProblemD_SA_prime) ===\n");
     std::printf("Input folder: %s\n", testcase_dir);
-    std::printf("Total limit : %.1f sec | LP init: %.1f sec | SA phase: %.1f sec\n", total_limit,
-                lp_init_limit, sa_phase_limit);
+    std::printf("Total limit : %.1f sec | LP init: %.1f sec | Greedy: %.1f sec | Greedy iters: %d | SA phase: %.1f sec\n",
+                total_limit, lp_init_limit, greedy_time_limit, greedy_iterations,
+                sa_phase_limit);
 
     if (pd_load_design(testcase_dir, &design, err, sizeof(err)) != 0) {
         std::fprintf(stderr, "Load failed: %s\n", err);
@@ -149,7 +174,8 @@ int main(int argc, char **argv)
     if (sa_result.lp_init_ok) {
         std::printf("Running greedy_post_lp (hold-preserving)...\n");
         if (greedy_post_lp(argv[2], testcase_dir, &problem, &design, &dp_ss, &dp_ff,
-                           &lp_init, &lp_init_metrics, 30.0, err, sizeof(err)) == 0) {
+                           &lp_init, &lp_init_metrics, greedy_time_limit, err,
+                           sizeof(err), greedy_iterations) == 0) {
             std::printf("Wrote %s/result_postlp_greedy.txt\n", argv[2]);
         } else {
             std::fprintf(stderr, "Greedy post-LP failed: %s\n", err);
