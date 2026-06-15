@@ -13,7 +13,7 @@
   - `include/greedy_postlp.hpp` - 函數聲明
   - `src/greedy_postlp.cpp` - 實現檔案
 - **集成位置**: `src/main.cpp` - LP_init 完成後、SA 開始前執行
-- **輸出檔案**: `result_postlp_greedy.txt` （不覆蓋 result.txt）
+- **輸出檔案**: `greedy_postlp_t540.txt` （不覆蓋 result.txt）
 
 ## Greedy Post-LP 策略詳解
 
