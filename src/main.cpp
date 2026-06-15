@@ -34,7 +34,8 @@ static double read_lp_init_limit()
         if (t > 0.1)
             return t;
     }
-    return 30.0;
+    // return 30.0;
+    return 15.0;
 }
 
 static double read_sa_phase_limit()

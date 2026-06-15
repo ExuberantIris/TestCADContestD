@@ -1,9 +1,9 @@
 greedy_postlp result
 testcase_dir: testcase/testcase0
-time_limit_sec: 60.0
+time_limit_sec: 470.0
 lp_init_ok: 1
-greedy_elapsed_sec: 9.732
-greedy_elapsed_time: 9.732 sec
+greedy_elapsed_sec: 15.527
+greedy_elapsed_time: 15.527 sec
 solver: greedy_post_lp
 solver_status: 0
 
