@@ -94,6 +94,88 @@ bool sa_build_ctx(const LpProblem *pb, const PdDesign *d, SaPgCtx *ctx)
     return true;
 }
 
+void sa_path_branches_for_path(const SaPgCtx &ctx, int path_idx, std::vector<int> *branches)
+{
+    branches->clear();
+    const int li = ctx.launch_ff[static_cast<std::size_t>(path_idx)];
+    const int ci = ctx.capture_ff[static_cast<std::size_t>(path_idx)];
+
+    if (li >= 0) {
+        for (int k = ctx.ff_path_off[static_cast<std::size_t>(li)];
+             k < ctx.ff_path_off[static_cast<std::size_t>(li + 1)]; k++)
+            branches->push_back(ctx.ff_path_br[static_cast<std::size_t>(k)]);
+    }
+    if (ci >= 0) {
+        for (int k = ctx.ff_path_off[static_cast<std::size_t>(ci)];
+             k < ctx.ff_path_off[static_cast<std::size_t>(ci + 1)]; k++)
+            branches->push_back(ctx.ff_path_br[static_cast<std::size_t>(k)]);
+    }
+
+    std::sort(branches->begin(), branches->end());
+    branches->erase(std::unique(branches->begin(), branches->end()), branches->end());
+}
+
+static int path_ds_find(const std::vector<int> &parent, int x)
+{
+    while (parent[static_cast<std::size_t>(x)] != x)
+        x = parent[static_cast<std::size_t>(x)];
+    return x;
+}
+
+static void path_ds_unite(std::vector<int> *parent, std::vector<int> *rank, int a, int b)
+{
+    a = path_ds_find(*parent, a);
+    b = path_ds_find(*parent, b);
+    if (a == b)
+        return;
+    if ((*rank)[static_cast<std::size_t>(a)] < (*rank)[static_cast<std::size_t>(b)])
+        std::swap(a, b);
+    (*parent)[static_cast<std::size_t>(b)] = a;
+    if ((*rank)[static_cast<std::size_t>(a)] == (*rank)[static_cast<std::size_t>(b)])
+        (*rank)[static_cast<std::size_t>(a)]++;
+}
+
+bool sa_build_path_index(const LpProblem *pb, const SaPgCtx &ctx, SaPathIndex *idx)
+{
+    const int n_paths = static_cast<int>(pb->path_ids.size());
+    const int n_br = static_cast<int>(pb->branches.size());
+
+    idx->branch_path_count.assign(static_cast<std::size_t>(n_br), 0);
+    idx->path_parent.resize(static_cast<std::size_t>(n_paths));
+    idx->path_rank.assign(static_cast<std::size_t>(n_paths), 0);
+    for (int p = 0; p < n_paths; p++)
+        idx->path_parent[static_cast<std::size_t>(p)] = p;
+
+    std::vector<std::vector<int>> branch_paths(static_cast<std::size_t>(n_br));
+    std::vector<int> path_branches;
+    path_branches.reserve(64);
+
+    for (int p = 0; p < n_paths; p++) {
+        sa_path_branches_for_path(ctx, p, &path_branches);
+        for (int b : path_branches) {
+            idx->branch_path_count[static_cast<std::size_t>(b)]++;
+            branch_paths[static_cast<std::size_t>(b)].push_back(p);
+        }
+    }
+
+    for (int b = 0; b < n_br; b++) {
+        auto &paths = branch_paths[static_cast<std::size_t>(b)];
+        std::sort(paths.begin(), paths.end());
+        paths.erase(std::unique(paths.begin(), paths.end()), paths.end());
+        if (paths.size() < 2)
+            continue;
+        for (std::size_t i = 1; i < paths.size(); i++)
+            path_ds_unite(&idx->path_parent, &idx->path_rank, paths[0], paths[i]);
+    }
+
+    return true;
+}
+
+int sa_path_ds_find(const SaPathIndex &idx, int p)
+{
+    return path_ds_find(idx.path_parent, p);
+}
+
 void sa_eval_state(const LpProblem *pb, const PdDesign *d, const std::vector<double> &d_ss,
                    const std::vector<double> &d_ff, const LpBufferChainDp *dp_ss,
                    const LpBufferChainDp *dp_ff, SaPgCtx *ctx)
@@ -271,6 +353,12 @@ double sa_path_violation_weight(const SaPgCtx &ctx, int path_idx)
     if (ff < 0.0)
         w += -ff;
     return w;
+}
+
+double sa_path_setup_violation_weight(const SaPgCtx &ctx, int path_idx)
+{
+    const double ss = ctx.slack_ss[static_cast<std::size_t>(path_idx)];
+    return ss < 0.0 ? -ss : 0.0;
 }
 
 void sa_path_branches_launch(const SaPgCtx &ctx, int path_idx, std::vector<int> *branches)

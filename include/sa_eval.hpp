@@ -29,7 +29,17 @@ struct SaPgCtx {
     double score = 0.0;
 };
 
+/** Per-branch path impact + union-find over timing paths sharing clock branches. */
+struct SaPathIndex {
+    std::vector<int> branch_path_count;
+    std::vector<int> path_parent;
+    std::vector<int> path_rank;
+};
+
 bool sa_build_ctx(const LpProblem *pb, const PdDesign *d, SaPgCtx *ctx);
+bool sa_build_path_index(const LpProblem *pb, const SaPgCtx &ctx, SaPathIndex *idx);
+int sa_path_ds_find(const SaPathIndex &idx, int p);
+void sa_path_branches_for_path(const SaPgCtx &ctx, int path_idx, std::vector<int> *branches);
 void sa_build_branch_opts(const LpProblem *pb, const PdDesign *d, std::vector<BranchDpOpts> *opts);
 void sa_init_from_design(const LpProblem *pb, const PdDesign *d, const std::vector<BranchDpOpts> &opts,
                          std::vector<double> *d_ss, std::vector<double> *d_ff);
@@ -37,6 +47,9 @@ void sa_eval_state(const LpProblem *pb, const PdDesign *d, const std::vector<dou
                    const std::vector<double> &d_ff, const LpBufferChainDp *dp_ss,
                    const LpBufferChainDp *dp_ff, SaPgCtx *ctx);
 void sa_branch_weights(const LpProblem *pb, const SaPgCtx &ctx, std::vector<double> *weights);
+
+/** Path violation weight = setup negative slack only. */
+double sa_path_setup_violation_weight(const SaPgCtx &ctx, int path_idx);
 
 /** Path violation weight = sum of negative slacks (setup + hold). */
 double sa_path_violation_weight(const SaPgCtx &ctx, int path_idx);

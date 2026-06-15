@@ -2,6 +2,7 @@
 #include "lp_mo_init.hpp"
 #include "lp_score.hpp"
 #include "lp_types.hpp"
+#include "pd_output.h"
 #include "sa_apply.hpp"
 #include "sa_eval.hpp"
 #include "sa_path_solve.hpp"
@@ -12,6 +13,7 @@
 #include <cstdio>
 #include <cstring>
 #include <sys/stat.h>
+#include <vector>
 
 static void read_time_limit(LpProblem *pb)
 {
@@ -131,6 +133,87 @@ int main(int argc, char **argv)
     sa_result.lp_init_sec =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - lp_t0).count();
 
+    /* ===== LP snapshot output (delete this block to disable) ===== */
+    {
+        LpMetrics lp_metrics{};
+        SaPgCtx lp_ctx;
+        if (sa_build_ctx(&problem, &design, &lp_ctx)) {
+            sa_eval_state(&problem, &design, initial.d_ss, initial.d_ff, &dp_ss, &dp_ff, &lp_ctx);
+            lp_metrics.wns_setup_ss = lp_ctx.wns_ss;
+            lp_metrics.tns_setup_ss = lp_ctx.tns_ss;
+            lp_metrics.wns_hold_ff = lp_ctx.wns_ff;
+            lp_metrics.tns_hold_ff = lp_ctx.tns_ff;
+            lp_metrics.area = lp_ctx.area;
+            lp_metrics.score = lp_ctx.score;
+            lp_print_metrics("after LP init", &lp_metrics);
+        }
+
+        if (argc >= 3) {
+            struct BufSnap {
+                int cell_idx;
+                char cell[PD_MAX_NAME];
+            };
+            std::vector<BufSnap> buf_snap(static_cast<std::size_t>(design.n_nodes));
+            for (int i = 0; i < design.n_nodes; i++) {
+                if (design.nodes[i].kind != PD_NODE_BUF)
+                    continue;
+                buf_snap[static_cast<std::size_t>(i)].cell_idx = design.nodes[i].cell_idx;
+                std::strncpy(buf_snap[static_cast<std::size_t>(i)].cell, design.nodes[i].cell,
+                             PD_MAX_NAME - 1);
+                buf_snap[static_cast<std::size_t>(i)].cell[PD_MAX_NAME - 1] = '\0';
+            }
+
+            LpSolution lp_sol = initial;
+            if (sa_apply_solution(&design, &problem, &lp_sol, &dp_ss, &dp_ff, err, sizeof(err)) ==
+                0) {
+                lp_compute_metrics(&design, &lp_metrics);
+                lp_metrics.score =
+                    lp_compute_score(lp_metrics.wns_setup_ss, lp_metrics.tns_setup_ss,
+                                     lp_metrics.wns_hold_ff, lp_metrics.tns_hold_ff, lp_metrics.area,
+                                     problem.wns_ss_ori, problem.tns_ss_ori, problem.wns_ff_ori,
+                                     problem.tns_ff_ori, problem.area_ori);
+
+                mkdir(argv[2], 0755);
+                const double wall_lp =
+                    std::chrono::duration<double>(std::chrono::steady_clock::now() - wall_t0)
+                        .count();
+                const char *lp_solver =
+                    sa_result.lp_init_ok ? lp_init.solver_name.c_str() : "original_delays";
+                if (lp_write_result_txt(argv[2], testcase_dir, &ori, &lp_metrics, lp_solver,
+                                        lp_init.status, total_limit, sa_phase_limit,
+                                        sa_result.lp_init_sec, sa_result.lp_init_ok, 0.0, wall_lp,
+                                        0, 0, "result_lp.txt", err, sizeof(err)) != 0) {
+                    std::fprintf(stderr, "Write result_lp.txt failed: %s\n", err);
+                } else {
+                    char result_lp[1024];
+                    if (pd_join_path(result_lp, sizeof(result_lp), argv[2], "result_lp.txt") == 0)
+                        std::printf("Wrote %s\n", result_lp);
+                }
+
+                char struct_path[1024];
+                if (pd_join_path(struct_path, sizeof(struct_path), argv[2],
+                                 "lp_init_clk_tree.structure") == 0 &&
+                    pd_write_structure(&design, struct_path, err, sizeof(err)) == 0) {
+                    std::printf("Wrote %s\n", struct_path);
+                } else {
+                    std::fprintf(stderr, "Write lp_init_clk_tree.structure failed: %s\n", err);
+                }
+            }
+
+            for (int i = 0; i < design.n_nodes; i++) {
+                if (design.nodes[i].kind != PD_NODE_BUF)
+                    continue;
+                design.nodes[i].cell_idx = buf_snap[static_cast<std::size_t>(i)].cell_idx;
+                std::strncpy(design.nodes[i].cell, buf_snap[static_cast<std::size_t>(i)].cell,
+                             PD_MAX_NAME - 1);
+                design.nodes[i].cell[PD_MAX_NAME - 1] = '\0';
+            }
+            pd_annotate_clock(&design);
+            pd_compute_timing(&design);
+        }
+    }
+    /* ===== end LP snapshot output ===== */
+
     if (sa_path_solve(&problem, &design, &dp_ss, &dp_ff, &initial, sa_phase_limit, &sa_result, err,
                       sizeof(err)) != 0) {
         std::fprintf(stderr, "SA failed: %s\n", err);
@@ -170,8 +253,8 @@ int main(int argc, char **argv)
         if (lp_write_result_txt(argv[2], testcase_dir, &ori, &opt, sa_result.solution.solver_name.c_str(),
                                 sa_result.solution.status, total_limit, sa_phase_limit,
                                 sa_result.lp_init_sec, sa_result.lp_init_ok, sa_result.elapsed_sec,
-                                wall_elapsed, sa_result.iterations, sa_result.use_second_best, err,
-                                sizeof(err)) != 0) {
+                                wall_elapsed, sa_result.iterations, sa_result.use_second_best, nullptr,
+                                err, sizeof(err)) != 0) {
             std::fprintf(stderr, "Write result.txt failed: %s\n", err);
         } else {
             char result_txt[1024];

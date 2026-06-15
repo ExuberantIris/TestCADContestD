@@ -23,4 +23,5 @@ int lp_write_result_txt(const char *result_dir, const char *testcase_dir, const 
                         const LpMetrics *opt, const char *solver_name, int solver_status,
                         double time_limit_sec, double sa_phase_limit_sec, double lp_init_sec,
                         int lp_init_ok, double sa_elapsed_sec, double wall_elapsed_sec,
-                        long long sa_iterations, int use_second_best, char *err, std::size_t err_sz);
+                        long long sa_iterations, int use_second_best, const char *result_basename,
+                        char *err, std::size_t err_sz);
