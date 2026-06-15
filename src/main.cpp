@@ -3,9 +3,10 @@
 #include "lp_types.hpp"
 #include "pd_output.h"
 #include "sa_apply.hpp"
+#include "sa_config.hpp"
 #include "sa_eval.hpp"
-#include "sa_small_lp_solve.hpp"
 #include "sa_solve.hpp"
+#include "setup_lp_solve.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -26,15 +27,15 @@ static void read_time_limit(LpProblem *pb)
     }
 }
 
-static double read_sa_phase_limit()
+static double read_setup_limit()
 {
-    const char *env = std::getenv("SA_PHASE_TIME_LIMIT");
+    const char *env = std::getenv("SETUP_LP_TIME_LIMIT");
     if (env && env[0]) {
         const double t = std::atof(env);
         if (t > 0.1)
             return t;
     }
-    return 510.0;
+    return SaConfig::kSetupLpTimeLimitSec;
 }
 
 int main(int argc, char **argv)
@@ -61,11 +62,11 @@ int main(int argc, char **argv)
         problem.time_limit_sec = 600.0;
 
     const double total_limit = problem.time_limit_sec;
-    const double sa_phase_limit = read_sa_phase_limit();
+    const double setup_limit = read_setup_limit();
 
-    std::printf("=== sa_solver (small_LP) ===\n");
+    std::printf("=== sa_solver (new_attempt setup longest-path) ===\n");
     std::printf("Input folder: %s\n", testcase_dir);
-    std::printf("Total limit : %.1f sec | SA phase: %.1f sec\n", total_limit, sa_phase_limit);
+    std::printf("Total limit : %.1f sec | Setup LP: %.1f sec\n", total_limit, setup_limit);
 
     if (pd_load_design(testcase_dir, &design, err, sizeof(err)) != 0) {
         std::fprintf(stderr, "Load failed: %s\n", err);
@@ -104,16 +105,16 @@ int main(int argc, char **argv)
     LpSolution initial;
     sa_init_from_design(&problem, &design, opts, &initial.d_ss, &initial.d_ff);
 
-    if (sa_small_lp_solve(&problem, &design, &dp_ss, &dp_ff, &initial, sa_phase_limit, &sa_result,
-                          err, sizeof(err)) != 0) {
-        std::fprintf(stderr, "Small-LP SA failed: %s\n", err);
+    if (setup_longest_path_solve(&problem, &design, &dp_ss, &dp_ff, &initial, setup_limit,
+                                 &sa_result, err, sizeof(err)) != 0) {
+        std::fprintf(stderr, "Setup longest-path failed: %s\n", err);
         sa_solution_free(&sa_result);
         lp_problem_free(&problem);
         pd_free_design(&design);
         return 1;
     }
 
-    std::printf("Solver: %s (status=%d, cycles=%lld, sa=%.1fs)\n",
+    std::printf("Solver: %s (status=%d, iters=%lld, elapsed=%.1fs)\n",
                 sa_result.solution.solver_name.c_str(), sa_result.solution.status,
                 static_cast<long long>(sa_result.iterations), sa_result.elapsed_sec);
 
@@ -140,7 +141,7 @@ int main(int argc, char **argv)
         mkdir(argv[2], 0755);
 
         if (lp_write_result_txt(argv[2], testcase_dir, &ori, &opt, sa_result.solution.solver_name.c_str(),
-                                sa_result.solution.status, total_limit, sa_phase_limit, 0.0, 0,
+                                sa_result.solution.status, total_limit, setup_limit, 0.0, 0,
                                 sa_result.elapsed_sec, wall_elapsed, sa_result.iterations,
                                 sa_result.use_second_best, nullptr, err, sizeof(err)) != 0) {
             std::fprintf(stderr, "Write result.txt failed: %s\n", err);

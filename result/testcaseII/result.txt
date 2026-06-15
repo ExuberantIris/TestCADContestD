@@ -1,15 +1,15 @@
 sa_solver_prime result
 testcase_dir: testcase/testcase2
 time_limit_sec: 600.0
-sa_phase_limit_sec: 510.0
+sa_phase_limit_sec: 180.0
 lp_init_sec: 0.000
 lp_init_ok: 0
-wall_elapsed_sec: 101.704
-sa_elapsed_sec: 101.463
-sa_iterations: 1008
+wall_elapsed_sec: 180.217
+sa_elapsed_sec: 180.004
+sa_iterations: 25019
 use_second_best: 0
-solver: small_lp_sa(stall)
-solver_status: 0
+solver: setup_topo_path(timed_out)
+solver_status: 2
 
 === baseline (ori) ===
 SS setup WNS : -0.302000  TNS : -98.697600
@@ -18,7 +18,7 @@ Total area   : 980.414032
 Score (a=b=g=1): 0.000000
 
 === after optimize ===
-SS setup WNS : -0.242800  TNS : -89.880900
-FF hold  WNS : -0.017900  TNS : -0.066200
-Total area   : 981.784632
-Score (a=b=g=1): 1.043056
+SS setup WNS : -0.303000  TNS : -98.605200
+FF hold  WNS : -0.030000  TNS : -0.103600
+Total area   : 965.533232
+Score (a=b=g=1): 0.004157
