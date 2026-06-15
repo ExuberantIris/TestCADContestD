@@ -4,9 +4,9 @@ time_limit_sec: 600.0
 sa_phase_limit_sec: 0.1
 lp_init_sec: 30.005
 lp_init_ok: 1
-wall_elapsed_sec: 38.768
+wall_elapsed_sec: 559.732
 sa_elapsed_sec: 0.110
-sa_iterations: 643
+sa_iterations: 717
 use_second_best: 0
 solver: path_heap_sa(timed_out)
 solver_status: 2
@@ -24,7 +24,7 @@ Total area   : 603.682728
 Score (a=b=g=1): 1.272538
 
 === after optimize ===
-SS setup WNS : -0.170200  TNS : -18.130900
+SS setup WNS : -0.170200  TNS : -18.122800
 FF hold  WNS : 0.050200  TNS : 0.000000
-Total area   : 550.064856
-Score (a=b=g=1): 0.623059
+Total area   : 550.456456
+Score (a=b=g=1): 0.622348

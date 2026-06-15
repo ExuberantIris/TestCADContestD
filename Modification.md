@@ -20,10 +20,10 @@
 ### 執行流程
 ```
 1. 從 LP_init 解開始
-2. 迭代最多 5 pass（每 pass 遍歷所有 branch）
+2. 迭代（每 pass 遍歷所有 branch）
 3. 每 pass 內對每個 branch 嘗試 SS delay 和 FF delay 的候選值
 4. 若找到改善就立即接受（first-fit greedy）
-5. 時間限制 30 秒或 pass 數達到上限則停止
+5. 時間限制 540 秒或不再改善則停止 (不硬性限制 pass 數)
 ```
 
 ### 核心約束 - Hold-Preserving

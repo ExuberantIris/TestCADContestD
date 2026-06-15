@@ -1,14 +1,10 @@
-sa_solver_prime result
+greedy_postlp result
 testcase_dir: testcase/testcase_basic
-time_limit_sec: 600.0
-sa_phase_limit_sec: 0.1
-lp_init_sec: 30.000
+time_limit_sec: 540.0
 lp_init_ok: 1
-wall_elapsed_sec: 30.026
-sa_elapsed_sec: 0.000
-sa_iterations: 1
-use_second_best: 0
-solver: path_heap_sa
+greedy_elapsed_sec: 0.004
+greedy_elapsed_time: 0.004 sec
+solver: greedy_post_lp
 solver_status: 0
 
 === baseline (ori) ===
@@ -23,8 +19,8 @@ FF hold  WNS : 0.133200  TNS : 0.000000
 Total area   : 2.700000
 Score (a=b=g=1): 0.000000
 
-=== after optimize ===
-SS setup WNS : 0.101000  TNS : 0.000000
-FF hold  WNS : 0.140800  TNS : 0.000000
+=== after greedy ===
+SS setup WNS : 0.114000  TNS : 0.000000
+FF hold  WNS : 0.133200  TNS : 0.000000
 Total area   : 2.700000
 Score (a=b=g=1): 0.000000
