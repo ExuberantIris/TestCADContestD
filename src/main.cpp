@@ -59,7 +59,7 @@ int main(int argc, char **argv)
     }
 
     testcase_dir = argv[1];
-    sa_params_load(&sa_params, kSaParamsPath);
+    sa_params_load(&sa_params);
 
     lp_problem_init(&problem);
     problem.time_limit_sec = sa_params.total_time_limit_sec;
@@ -73,7 +73,7 @@ int main(int argc, char **argv)
 
     std::printf("=== sa_solver (seg-tree direct + SA) ===\n");
     std::printf("Input folder: %s\n", testcase_dir);
-    std::printf("Params file : %s\n", kSaParamsPath);
+    std::printf("Params      : embedded (src/sa_params.txt)\n");
     std::printf("Total limit : %.1f sec | SA phase: %.1f sec\n", total_limit, sa_limit);
     std::printf("Score weights: a=%.4f b=%.4f g=%.4f | no_improve_limit=%d | sa_batch_size=%d\n",
                 wt.a, wt.b, wt.g, sa_params.no_improve_limit, sa_params.sa_batch_size);

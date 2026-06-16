@@ -2,12 +2,7 @@
 
 #include "lp_score.hpp"
 
-#include <cstddef>
-
-/** Path to the solver parameter file (relative to ProblemD project root). */
-inline constexpr const char *kSaParamsPath = "src/sa_params.txt";
-
-/** Tunable solver / SA parameters loaded from src/sa_params.txt. */
+/** Tunable solver / SA parameters embedded from src/sa_params.txt at build time. */
 struct SaParams {
     /** Wall-clock budget for the whole solver run (seconds). */
     double total_time_limit_sec = 600.0;
@@ -33,8 +28,12 @@ struct SaParams {
 
     /** Phase-2: probability of path-directed move when violations exist. */
     double phase2_path_move_prob = 0.85;
+    /** Number of highest-violation paths tracked in SA candidate array. */
+    int phase2_active_path_count = 10;
     /** Phase-2: pick violating path from top-N worst (weighted slack). */
     int phase2_top_path_pool = 20;
+    /** Ban a path once its failed-attempt count exceeds this threshold. */
+    int phase2_path_ban_fail_limit = 40;
     /** Phase-2: pick area-recovery branch from top-N highest delay. */
     int phase2_area_branch_pool = 24;
 
@@ -44,5 +43,5 @@ struct SaParams {
     LpScoreWeights score_weights{};
 };
 
-/** Load src/sa_params.txt. Missing keys keep struct defaults. */
-void sa_params_load(SaParams *out, const char *path);
+/** Load embedded sa_params.txt. Missing keys keep struct defaults. */
+void sa_params_load(SaParams *out);

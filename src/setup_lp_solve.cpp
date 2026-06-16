@@ -324,13 +324,15 @@ void filter_existing_buf_branches(const LpProblem *pb, const std::vector<int> &r
 }
 
 void build_weighted_violating_paths(const SaPgCtx &ctx, const LpScoreWeights &wt, int top_path_pool,
-                                    std::vector<int> *pool)
+                                    const std::vector<char> *path_banned, std::vector<int> *pool)
 {
     pool->clear();
     std::vector<std::pair<double, int>> ranked;
     ranked.reserve(ctx.slack_ss.size());
 
     for (std::size_t p = 0; p < ctx.slack_ss.size(); p++) {
+        if (path_banned && (*path_banned)[p])
+            continue;
         double w = 0.0;
         if (ctx.slack_ss[p] < 0.0)
             w += wt.a * (-ctx.slack_ss[p]);
@@ -494,18 +496,26 @@ bool try_hybrid_move(const std::vector<double> &target_d_ss, const SaPgCtx &ctx,
                      const LpProblem *pb, const std::vector<BranchDpOpts> &opts,
                      const std::vector<int> &branch_stall, const SaParams &cfg,
                      const LpScoreWeights &wt, const std::vector<double> &cur_ss,
-                     std::mt19937 &rng, std::vector<double> *trial_ss, int *moved_branch)
+                     const std::vector<char> *path_banned, std::mt19937 &rng,
+                     std::vector<double> *trial_ss, int *moved_branch, int *picked_path_idx)
 {
     std::vector<int> viol_paths;
-    build_weighted_violating_paths(ctx, wt, cfg.phase2_top_path_pool, &viol_paths);
+    build_weighted_violating_paths(ctx, wt, cfg.phase2_top_path_pool, path_banned, &viol_paths);
 
     *trial_ss = cur_ss;
     *moved_branch = -1;
+    if (picked_path_idx)
+        *picked_path_idx = -1;
+
+    if (static_cast<int>(viol_paths.size()) > cfg.phase2_active_path_count)
+        viol_paths.resize(static_cast<std::size_t>(cfg.phase2_active_path_count));
 
     if (!viol_paths.empty() &&
         std::uniform_real_distribution<double>(0.0, 1.0)(rng) < cfg.phase2_path_move_prob) {
         const int path_idx = viol_paths[static_cast<std::size_t>(
             std::uniform_int_distribution<int>(0, static_cast<int>(viol_paths.size()) - 1)(rng))];
+        if (picked_path_idx)
+            *picked_path_idx = path_idx;
         if (try_path_directed_move(path_idx, ctx, pb, opts, branch_stall, cfg.sa_branch_no_improve_limit,
                                    rng, trial_ss, moved_branch))
             return true;
@@ -1005,6 +1015,8 @@ int seg_tree_sa_solve(LpProblem *pb, const PdDesign *d, const LpBufferChainDp *d
     std::vector<double> best_ff = cur_ff;
 
     std::vector<int> branch_stall(static_cast<std::size_t>(n_br), 0);
+    std::vector<int> path_fail_count(ctx.slack_ss.size(), 0);
+    std::vector<char> path_banned(ctx.slack_ss.size(), 0);
     std::mt19937 rng(static_cast<unsigned>(
         std::chrono::steady_clock::now().time_since_epoch().count()));
     std::uniform_real_distribution<double> uni01(0.0, 1.0);
@@ -1017,6 +1029,7 @@ int seg_tree_sa_solve(LpProblem *pb, const PdDesign *d, const LpBufferChainDp *d
 
     if (batch_sz > 0) {
         while (elapsed_sec(t0) < time_limit_sec) {
+            std::vector<int> batch_path_attempt(path_fail_count.size(), 0);
             for (int bi = 0; bi < batch_sz && elapsed_sec(t0) < time_limit_sec; bi++) {
                 out->iterations++;
 
@@ -1024,9 +1037,13 @@ int seg_tree_sa_solve(LpProblem *pb, const PdDesign *d, const LpBufferChainDp *d
 
                 std::vector<double> trial_ss;
                 int moved_branch = -1;
+                int picked_path_idx = -1;
                 if (!try_hybrid_move(target_d_ss, ctx, pb, opts, branch_stall, params, wt, cur_ss,
-                                     rng, &trial_ss, &moved_branch))
+                                     &path_banned, rng, &trial_ss, &moved_branch, &picked_path_idx))
                     continue;
+                if (picked_path_idx >= 0 &&
+                    picked_path_idx < static_cast<int>(batch_path_attempt.size()))
+                    batch_path_attempt[static_cast<std::size_t>(picked_path_idx)]++;
 
                 cur_ss = std::move(trial_ss);
                 sa_eval_state(pb, d, cur_ss, cur_ff, dp_ss, dp_ff, &ctx);
@@ -1041,6 +1058,11 @@ int seg_tree_sa_solve(LpProblem *pb, const PdDesign *d, const LpBufferChainDp *d
                 best_ff = cur_ff;
                 no_improve_iters = 0;
             } else {
+                for (std::size_t p = 0; p < path_fail_count.size(); p++) {
+                    path_fail_count[p] += batch_path_attempt[p];
+                    if (path_fail_count[p] > params.phase2_path_ban_fail_limit)
+                        path_banned[p] = 1;
+                }
                 cur_ss = best_ss;
                 sa_eval_state(pb, d, cur_ss, cur_ff, dp_ss, dp_ff, &ctx);
                 no_improve_iters += batch_sz;
@@ -1059,7 +1081,8 @@ int seg_tree_sa_solve(LpProblem *pb, const PdDesign *d, const LpBufferChainDp *d
             std::vector<double> trial_ss;
             int moved_branch = -1;
             const bool moved = try_hybrid_move(target_d_ss, ctx, pb, opts, branch_stall, params, wt,
-                                               cur_ss, rng, &trial_ss, &moved_branch);
+                                               cur_ss, &path_banned, rng, &trial_ss, &moved_branch,
+                                               nullptr);
 
             if (!moved || moved_branch < 0) {
                 no_improve_iters++;

@@ -31,7 +31,15 @@ set(SA_SOURCES
     src/sa_apply.cpp
 )
 
-add_executable(sa_solver ${PD_SOURCES} ${SA_SOURCES})
+set(SA_PARAMS_EMBED ${CMAKE_CURRENT_BINARY_DIR}/sa_params_embed.cpp)
+add_custom_command(
+    OUTPUT ${SA_PARAMS_EMBED}
+    COMMAND xxd -i ${CMAKE_CURRENT_SOURCE_DIR}/src/sa_params.txt ${SA_PARAMS_EMBED}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/sa_params.txt
+    COMMENT "Embedding src/sa_params.txt"
+)
+
+add_executable(sa_solver ${PD_SOURCES} ${SA_SOURCES} ${SA_PARAMS_EMBED})
 target_include_directories(sa_solver PRIVATE include)
 
 target_compile_options(sa_solver PRIVATE
