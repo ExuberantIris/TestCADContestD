@@ -204,7 +204,7 @@ int main(int argc, char **argv)
     // Phase 2: Greedy Local Search
     // ---------------------------------------------------------
     if (sa_result.lp_init_ok) {
-        std::printf("Running greedy_post_lp (hold-preserving)...\n");
+        std::printf("Running greedy_post_lp (no hold-preserving)...\n");
         // 注意：待會我們改 greedy_postlp.cpp 時，要把 lp_init 的 const 拿掉
         // 讓 greedy 可以把算出來的最佳解直接寫回 lp_init 裡面
         if (greedy_post_lp(argv[2], testcase_dir, &problem, &design, &dp_ss, &dp_ff,

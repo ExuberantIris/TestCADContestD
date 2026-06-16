@@ -160,11 +160,11 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
                 double cand_score = lp_compute_score(d->wns_setup_ss, d->tns_setup_ss, d->wns_hold_ff, d->tns_hold_ff, d->total_area,
                                                      pb->wns_ss_ori, pb->tns_ss_ori, pb->wns_ff_ori, pb->tns_ff_ori, pb->area_ori);
 
-                // Hold-preserving 檢查 (不得比 LP_init 更糟)
-                if (d->wns_hold_ff < lp_init_metrics->wns_hold_ff - eps ||
-                    d->tns_hold_ff < lp_init_metrics->tns_hold_ff - eps) {
-                    continue;
-                }
+                // // Hold-preserving 檢查 (不得比 LP_init 更糟)
+                // if (d->wns_hold_ff < lp_init_metrics->wns_hold_ff - eps ||
+                //     d->tns_hold_ff < lp_init_metrics->tns_hold_ff - eps) {
+                //     continue;
+                // }
 
                 double delta = cand_score - cur_score;
                 if (delta > best_delta + 1e-12) {
