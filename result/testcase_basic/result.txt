@@ -4,8 +4,8 @@ time_limit_sec: 600.0
 sa_phase_limit_sec: 555.0
 lp_init_sec: 15.000
 lp_init_ok: 1
-wall_elapsed_sec: 15.020
-sa_elapsed_sec: 15.006
+wall_elapsed_sec: 15.033
+sa_elapsed_sec: 15.009
 sa_iterations: 0
 use_second_best: 0
 solver: Greedy_Best_Impr
@@ -18,8 +18,8 @@ Total area   : 2.700000
 Score (a=0.6, b=0.2, g=0.2): 0.000000
 
 === after LP init ===
-SS setup WNS : 0.114000  TNS : 0.000000
-FF hold  WNS : 0.133200  TNS : 0.000000
+SS setup WNS : 0.101000  TNS : 0.000000
+FF hold  WNS : 0.140800  TNS : 0.000000
 Total area   : 2.700000
 Score (a=0.6, b=0.2, g=0.2): 0.000000
 

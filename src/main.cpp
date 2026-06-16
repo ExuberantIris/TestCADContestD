@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstring>
 #include <sys/stat.h>
+#include <cmath>
 
 static void read_time_limit(LpProblem *pb)
 {
@@ -149,23 +150,55 @@ int main(int argc, char **argv)
         std::printf("LP init: skipped/failed, using original clock tree delays\n");
     }
     sa_result.lp_init_sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - lp_t0).count();
+// 🔪 強制將 LP 初始解轉換為真實圖形，並請出真實裁判計分
     if (sa_result.lp_init_ok) {
         for (std::size_t b = 0; b < problem.branches.size(); b++) {
-            if (problem.branches[b].kind != LpBranchKind::ExistingBuf) {
-                lp_init.d_ss[b] = 0.0;
-                lp_init.d_ff[b] = 0.0;
+            const LpBranch &br = problem.branches[b];
+            
+            // 消除幽靈 Buffer
+            if (br.kind != LpBranchKind::ExistingBuf) {
+                lp_init.d_ss[b] = 0.0; // 🌟 修正：改成 lp_init
+                lp_init.d_ff[b] = 0.0; // 🌟 修正：改成 lp_init
+                continue;
+            }
+
+            // 尋找真實物理元件
+            double target_ss = lp_init.d_ss[b]; // 🌟 修正：改成 lp_init
+            int best_ci = -1;
+            double min_err = 1e9;
+            for (int ci = 0; ci < design.n_cells; ci++) {
+                if (br.fanout > design.cells[ci].max_fanout) continue;
+                double css = lp_eval_branch_delay_ss(&design, &design.cells[ci], br.fanout);
+                if (std::fabs(css - target_ss) < min_err) {
+                    min_err = std::fabs(css - target_ss);
+                    best_ci = ci;
+                }
+            }
+
+            // 直接把真實元件塞進電路圖
+            if (best_ci >= 0) {
+                PdNode *node = &design.nodes[br.child_node];
+                if (node->kind == PD_NODE_BUF) {
+                    node->cell_idx = best_ci;
+                    std::strncpy(node->cell, design.cells[best_ci].name, PD_MAX_NAME - 1);
+                    node->cell[PD_MAX_NAME - 1] = '\0';
+                }
             }
         }
-        // 重新評估真正的 LP Init 現實分數
-        SaPgCtx reality_ctx;
-        sa_build_ctx(&problem, &design, &reality_ctx);
-        sa_eval_state(&problem, &design, lp_init.d_ss, lp_init.d_ff, &dp_ss, &dp_ff, &reality_ctx);
-        lp_init_metrics.wns_setup_ss = reality_ctx.wns_ss;
-        lp_init_metrics.tns_setup_ss = reality_ctx.tns_ss;
-        lp_init_metrics.wns_hold_ff = reality_ctx.wns_ff;
-        lp_init_metrics.tns_hold_ff = reality_ctx.tns_ff;
-        lp_init_metrics.area = reality_ctx.area;
-        lp_init_metrics.score = reality_ctx.score;
+
+        // 呼叫真實的時序引擎，算出沒有幻覺的分數！
+        pd_annotate_clock(&design);
+        pd_compute_timing(&design);
+
+        lp_init_metrics.wns_setup_ss = design.wns_setup_ss;
+        lp_init_metrics.tns_setup_ss = design.tns_setup_ss;
+        lp_init_metrics.wns_hold_ff  = design.wns_hold_ff;
+        lp_init_metrics.tns_hold_ff  = design.tns_hold_ff;
+        lp_init_metrics.area         = design.total_area;
+        lp_init_metrics.score        = lp_compute_score(
+            design.wns_setup_ss, design.tns_setup_ss, design.wns_hold_ff, design.tns_hold_ff, design.total_area,
+            problem.wns_ss_ori, problem.tns_ss_ori, problem.wns_ff_ori, problem.tns_ff_ori, problem.area_ori
+        );
     }
     // ---------------------------------------------------------
     // Phase 2: Greedy Local Search
