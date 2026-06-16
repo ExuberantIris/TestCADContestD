@@ -86,9 +86,9 @@ double lp_compute_weighted_score(double wns_ss, double tns_ss, double wns_ff, do
     const double wns_ff_term = 1.0 - score_term_ratio(wns_ff_p, score_pos_wns(wns_ff_ori));
     const double area_term = 1.0 - score_term_ratio(area, area_ori);
 
-    const double tns_part = 0.5 * (tns_ss_term + tns_ff_term);
-    const double wns_part = 0.5 * (wns_ss_term + wns_ff_term);
-    return wt.a * tns_part + wt.b * wns_part + wt.g * area_term;
+    const double ss_part = (tns_ss_term + wns_ss_term);
+    const double ff_part = (tns_ff_term + wns_ff_term);
+    return wt.a * ss_part + wt.b * ff_part + wt.g * area_term;
 }
 
 void lp_print_weighted_metrics(const char *label, const LpMetrics *m, const LpScoreWeights &wt)
