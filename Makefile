@@ -3,9 +3,9 @@ CXX     = g++
 CFLAGS  = -std=c11 -Wall -Wextra -O2 -Iinclude
 CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -Iinclude
 LDFLAGS = -lm
+
 TESTCASE_DIR ?= testcase
 RESULT_DIR ?= result
-SA_PHASE_TIME_LIMIT ?= 0.11
 GREEDY_TIME_LIMIT ?= 555.0
 TESTCASE ?= all
 TC ?= $(TESTCASE)
@@ -18,15 +18,15 @@ PD_SRCS = $(PD_DIR)/src/pd_parser.c \
           $(PD_DIR)/src/pd_timing.c \
           $(PD_DIR)/src/pd_output.c
 
+# 移除 src/sa_path_solve.cpp
 SA_SRCS = src/main.cpp \
           src/lp_branch.cpp \
           src/lp_score.cpp \
           src/lp_buffer_dp.cpp \
           src/lp_mo_init.cpp \
           src/sa_eval.cpp \
-          src/sa_path_solve.cpp \
-		  src/sa_apply.cpp \
-		  src/greedy_postlp.cpp
+          src/sa_apply.cpp \
+          src/greedy_postlp.cpp
 
 PD_OBJS = $(PD_SRCS:.c=.lp.o)
 SA_OBJS = $(SA_SRCS:.cpp=.o)
@@ -55,17 +55,17 @@ run: sa_solver
 			exit 1; \
 		fi; \
 		mkdir -p "$(RESULT_DIR)/$$tc"; \
-		echo "==> Running $$tc -> $(RESULT_DIR)/$$tc (SA_PHASE_TIME_LIMIT=$(SA_PHASE_TIME_LIMIT) GREEDY_TIME_LIMIT=$(GREEDY_TIME_LIMIT))"; \
-		SA_PHASE_TIME_LIMIT=$(SA_PHASE_TIME_LIMIT) GREEDY_TIME_LIMIT=$(GREEDY_TIME_LIMIT) ./sa_solver "$(TESTCASE_DIR)/$$tc" "$(RESULT_DIR)/$$tc"; \
+		echo "==> Running $$tc -> $(RESULT_DIR)/$$tc (GREEDY_TIME_LIMIT=$(GREEDY_TIME_LIMIT))"; \
+		GREEDY_TIME_LIMIT=$(GREEDY_TIME_LIMIT) ./sa_solver "$(TESTCASE_DIR)/$$tc" "$(RESULT_DIR)/$$tc"; \
 	fi
 
 run-all: sa_solver
 	@set -e; \
-	echo "Using SA_PHASE_TIME_LIMIT=$(SA_PHASE_TIME_LIMIT) GREEDY_TIME_LIMIT=$(GREEDY_TIME_LIMIT)"; \
+	echo "Using GREEDY_TIME_LIMIT=$(GREEDY_TIME_LIMIT)"; \
 	for tc in $(TESTCASES); do \
 		mkdir -p "$(RESULT_DIR)/$$tc"; \
 		echo "==> Running $$tc -> $(RESULT_DIR)/$$tc"; \
-		SA_PHASE_TIME_LIMIT=$(SA_PHASE_TIME_LIMIT) GREEDY_TIME_LIMIT=$(GREEDY_TIME_LIMIT) GREEDY_ITERATIONS=$(GREEDY_ITERATIONS) ./sa_solver "$(TESTCASE_DIR)/$$tc" "$(RESULT_DIR)/$$tc"; \
+		GREEDY_TIME_LIMIT=$(GREEDY_TIME_LIMIT) ./sa_solver "$(TESTCASE_DIR)/$$tc" "$(RESULT_DIR)/$$tc"; \
 	done
 
 print_lp_input: $(PD_OBJS) $(PRINT_LP_OBJS) src/lp_branch.o src/lp_score.o src/lp_buffer_dp.o src/sa_eval.o

@@ -39,18 +39,32 @@ double lp_compute_score(double wns_ss, double tns_ss, double wns_ff, double tns_
                         double wns_ss_ori, double tns_ss_ori, double wns_ff_ori, double tns_ff_ori,
                         double area_ori)
 {
-    double s = 0.0;
+    // double s = 0.0;
+    // const double tns_ss_p = score_pos_tns(tns_ss);
+    // const double wns_ss_p = score_pos_wns(wns_ss);
+    // const double tns_ff_p = score_pos_tns(tns_ff);
+    // const double wns_ff_p = score_pos_wns(wns_ff);
+
+    // s += 1.0 - score_term_ratio(tns_ss_p, score_pos_tns(tns_ss_ori));
+    // s += 1.0 - score_term_ratio(wns_ss_p, score_pos_wns(wns_ss_ori));
+    // s += 1.0 - score_term_ratio(tns_ff_p, score_pos_tns(tns_ff_ori));
+    // s += 1.0 - score_term_ratio(wns_ff_p, score_pos_wns(wns_ff_ori));
+    // s += 1.0 - score_term_ratio(area, area_ori);
+    // return s;
     const double tns_ss_p = score_pos_tns(tns_ss);
     const double wns_ss_p = score_pos_wns(wns_ss);
     const double tns_ff_p = score_pos_tns(tns_ff);
     const double wns_ff_p = score_pos_wns(wns_ff);
 
-    s += 1.0 - score_term_ratio(tns_ss_p, score_pos_tns(tns_ss_ori));
-    s += 1.0 - score_term_ratio(wns_ss_p, score_pos_wns(wns_ss_ori));
-    s += 1.0 - score_term_ratio(tns_ff_p, score_pos_tns(tns_ff_ori));
-    s += 1.0 - score_term_ratio(wns_ff_p, score_pos_wns(wns_ff_ori));
-    s += 1.0 - score_term_ratio(area, area_ori);
-    return s;
+    const double tns_ss_term = 1.0 - score_term_ratio(tns_ss_p, score_pos_tns(tns_ss_ori));
+    const double wns_ss_term = 1.0 - score_term_ratio(wns_ss_p, score_pos_wns(wns_ss_ori));
+    const double tns_ff_term = 1.0 - score_term_ratio(tns_ff_p, score_pos_tns(tns_ff_ori));
+    const double wns_ff_term = 1.0 - score_term_ratio(wns_ff_p, score_pos_wns(wns_ff_ori));
+    const double area_term = 1.0 - score_term_ratio(area, area_ori);
+
+    const double ss_part = (tns_ss_term + wns_ss_term);
+    const double ff_part = (tns_ff_term + wns_ff_term);
+    return 0.6 * ss_part + 0.2 * ff_part + 0.2 * area_term;
 }
 
 void lp_print_metrics(const char *label, const LpMetrics *m)
@@ -59,7 +73,7 @@ void lp_print_metrics(const char *label, const LpMetrics *m)
     std::printf("SS setup WNS : %.6f  TNS : %.6f\n", m->wns_setup_ss, m->tns_setup_ss);
     std::printf("FF hold  WNS : %.6f  TNS : %.6f\n", m->wns_hold_ff, m->tns_hold_ff);
     std::printf("Total area   : %.6f\n", m->area);
-    std::printf("Score (a=b=g=1): %.6f\n", m->score);
+    std::printf("Score (a=0.6, b=0.2, g=0.2): %.6f\n", m->score);
 }
 
 int lp_write_result_txt(const char *result_dir, const char *testcase_dir, const LpMetrics *ori,
@@ -101,7 +115,7 @@ int lp_write_result_txt(const char *result_dir, const char *testcase_dir, const 
     std::fprintf(fp, "SS setup WNS : %.6f  TNS : %.6f\n", ori->wns_setup_ss, ori->tns_setup_ss);
     std::fprintf(fp, "FF hold  WNS : %.6f  TNS : %.6f\n", ori->wns_hold_ff, ori->tns_hold_ff);
     std::fprintf(fp, "Total area   : %.6f\n", ori->area);
-    std::fprintf(fp, "Score (a=b=g=1): %.6f\n\n", ori->score);
+    std::fprintf(fp, "Score (a=0.6, b=0.2, g=0.2): %.6f\n\n", ori->score);
 
     if (lp_init_ok) {
         std::fprintf(fp, "=== after LP init ===\n");
@@ -110,7 +124,7 @@ int lp_write_result_txt(const char *result_dir, const char *testcase_dir, const 
         std::fprintf(fp, "FF hold  WNS : %.6f  TNS : %.6f\n", lp_init->wns_hold_ff,
                         lp_init->tns_hold_ff);
         std::fprintf(fp, "Total area   : %.6f\n", lp_init->area);
-        std::fprintf(fp, "Score (a=b=g=1): %.6f\n\n", lp_init->score);
+        std::fprintf(fp, "Score (a=0.6, b=0.2, g=0.2): %.6f\n\n", lp_init->score);
     } else {
         std::fprintf(fp, "=== after LP init ===\n");
         std::fprintf(fp, "LP init skipped/failed (no metrics)\n\n");
@@ -120,7 +134,7 @@ int lp_write_result_txt(const char *result_dir, const char *testcase_dir, const 
     std::fprintf(fp, "SS setup WNS : %.6f  TNS : %.6f\n", opt->wns_setup_ss, opt->tns_setup_ss);
     std::fprintf(fp, "FF hold  WNS : %.6f  TNS : %.6f\n", opt->wns_hold_ff, opt->tns_hold_ff);
     std::fprintf(fp, "Total area   : %.6f\n", opt->area);
-    std::fprintf(fp, "Score (a=b=g=1): %.6f\n", opt->score);
+    std::fprintf(fp, "Score (a=0.6, b=0.2, g=0.2): %.6f\n", opt->score);
 
     std::fclose(fp);
     return 0;

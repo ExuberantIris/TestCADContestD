@@ -34,6 +34,9 @@ class LpBufferChainDp {
 
     void print_table(std::ostream &out, LpBufferDpCorner corner) const;
 
+    // 🌟 已移至 public 區塊，讓 Greedy 演算法可以呼叫以計算精確面積
+    double cell_area(const PdCell *c) const;
+
   private:
     using Key = long long;
 
@@ -41,7 +44,7 @@ class LpBufferChainDp {
     static double key_to_delay(Key k);
 
     double cell_delay(const PdCell *c, int fanout, LpBufferDpCorner corner) const;
-    double cell_area(const PdCell *c) const;
+    // double cell_area(const PdCell *c) const; // 已移出
 
     const PdDesign *design_ = nullptr;
     int max_fanout_ = 1;

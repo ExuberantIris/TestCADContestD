@@ -1,6 +1,4 @@
 #include "greedy_postlp.hpp"
-
-#include "sa_eval.hpp"
 #include "lp_score.hpp"
 #include "pd_util.h"
 
@@ -18,231 +16,204 @@ static double elapsed_sec(const Clock::time_point &t0)
 }
 
 int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpProblem *pb,
-                   const PdDesign *d, const LpBufferChainDp *dp_ss,
-                   const LpBufferChainDp *dp_ff, const LpSolution *lp_init,
+                   const PdDesign *d_const, const LpBufferChainDp *dp_ss,
+                   const LpBufferChainDp *dp_ff, LpSolution *lp_init,
                    const LpMetrics *lp_init_metrics, double time_limit_sec, char *err,
                    std::size_t err_sz)
 {
-    // debug: write entry marker
-    {
-        char dbg[1024];
-        if (pd_join_path(dbg, sizeof(dbg), result_dir, "greedy_debug.txt") == 0) {
-            FILE *df = std::fopen(dbg, "a");
-            if (df) {
-                std::fprintf(df, "greedy_post_lp called\n");
-                std::fclose(df);
+    std::printf("greedy_post_lp: entry (Ultimate Reality Version)\n");
+
+    if (!pb || !d_const || !dp_ss || !dp_ff || !lp_init || !lp_init_metrics || !result_dir) {
+        if (err && err_sz > 0) std::snprintf(err, err_sz, "null arg");
+        return -1;
+    }
+
+    PdDesign *d = const_cast<PdDesign *>(d_const);
+    const double eps = 1e-9;
+    const int n_br = static_cast<int>(pb->branches.size());
+    std::vector<double> cur_ss = lp_init->d_ss;
+    std::vector<double> cur_ff = lp_init->d_ff;
+
+    if (cur_ss.empty() || cur_ff.empty()) return -1;
+
+    // ---------------------------------------------------------
+    // 🔧 步驟 1: 強制將圖形還原到 LP Init 的起點
+    // ---------------------------------------------------------
+    std::printf("greedy_post_lp: Syncing graph to reality...\n");
+    for (int b = 0; b < n_br; b++) {
+        const LpBranch &br = pb->branches[b];
+        if (br.kind != LpBranchKind::ExistingBuf) continue;
+
+        double target_ss = cur_ss[b];
+        int best_ci = -1;
+        double min_err = 1e9;
+        
+        // 找出 LP 建議的最接近真實元件
+        for (int ci = 0; ci < d->n_cells; ci++) {
+            const PdCell *c = &d->cells[ci];
+            if (br.fanout > c->max_fanout) continue;
+            double css = lp_eval_branch_delay_ss(d, c, br.fanout);
+            double err = std::fabs(css - target_ss);
+            if (err < min_err) {
+                min_err = err;
+                best_ci = ci;
+            }
+        }
+        
+        // 將該元件真實套用至圖形上
+        if (best_ci >= 0) {
+            PdNode *node = &d->nodes[br.child_node];
+            if (node->kind == PD_NODE_BUF) {
+                node->cell_idx = best_ci;
+                std::strncpy(node->cell, d->cells[best_ci].name, PD_MAX_NAME - 1);
+                node->cell[PD_MAX_NAME - 1] = '\0';
+                cur_ss[b] = lp_eval_branch_delay_ss(d, &d->cells[best_ci], br.fanout);
+                cur_ff[b] = lp_eval_branch_delay_ff(d, &d->cells[best_ci], br.fanout);
             }
         }
     }
 
-    std::printf("greedy_post_lp: entry\n");
+    // 取得真正的初始分數
+    pd_annotate_clock(d);
+    pd_compute_timing(d);
+    double cur_score = lp_compute_score(d->wns_setup_ss, d->tns_setup_ss, d->wns_hold_ff, d->tns_hold_ff, d->total_area,
+                                        pb->wns_ss_ori, pb->tns_ss_ori, pb->wns_ff_ori, pb->tns_ff_ori, pb->area_ori);
 
-    if (!pb || !d || !dp_ss || !dp_ff || !lp_init || !lp_init_metrics || !result_dir) {
-        if (err && err_sz > 0)
-            std::snprintf(err, err_sz, "null arg to greedy_post_lp");
-        return -1;
-    }
-
-    const double eps = 1e-9;
-    std::vector<BranchDpOpts> opts;
-    sa_build_branch_opts(pb, const_cast<PdDesign *>(d), &opts);
-    std::printf("greedy_post_lp: built %zu branch opts\n", opts.size());
-
-    std::vector<double> cur_ss = lp_init->d_ss;
-    std::vector<double> cur_ff = lp_init->d_ff;
-    std::printf("greedy_post_lp: lp_init sizes ss=%zu ff=%zu\n", cur_ss.size(), cur_ff.size());
-    if (cur_ss.empty() || cur_ff.empty()) {
-        if (err && err_sz > 0)
-            std::snprintf(err, err_sz, "LP init solution empty");
-        return -1;
-    }
-
-    SaPgCtx ctx;
-    if (!sa_build_ctx(pb, const_cast<PdDesign *>(d), &ctx)) {
-        if (err && err_sz > 0)
-            std::snprintf(err, err_sz, "sa_build_ctx failed in greedy_post_lp");
-        return -1;
-    }
-    std::printf("greedy_post_lp: built ctx\n");
-    std::printf("greedy_post_lp: before sa_eval_state\n");
-    sa_eval_state(const_cast<LpProblem *>(pb), const_cast<PdDesign *>(d), cur_ss, cur_ff, dp_ss,
-                  dp_ff, &ctx);
-    std::printf("greedy_post_lp: after sa_eval_state\n");
-
-    double cur_score = ctx.score;
     const Clock::time_point t0 = Clock::now();
-
     bool improved = true;
     int passes = 0;
 
+    // ---------------------------------------------------------
+    // 🏃 步驟 2: 面對真實物理世界的 Greedy 迴圈
+    // ---------------------------------------------------------
     while (improved && elapsed_sec(t0) < time_limit_sec) {
         improved = false;
         passes++;
-        const int n_br = static_cast<int>(pb->branches.size());
+        
         for (int b = 0; b < n_br && elapsed_sec(t0) < time_limit_sec; b++) {
-            const auto &o = opts[static_cast<std::size_t>(b)];
+            const LpBranch &br = pb->branches[b];
+            if (br.kind != LpBranchKind::ExistingBuf) continue;
 
+            PdNode *node = &d->nodes[br.child_node];
+            if (node->kind != PD_NODE_BUF) continue;
+
+            // 備份當前的圖形節點狀態
+            int orig_cell_idx = node->cell_idx;
+            char orig_cell_name[PD_MAX_NAME];
+            std::strncpy(orig_cell_name, node->cell, PD_MAX_NAME);
+            
             double best_delta = 0.0;
-            std::vector<double> best_ss = cur_ss;
-            std::vector<double> best_ff = cur_ff;
-            SaPgCtx best_ctx = ctx;
+            int best_cell_idx = orig_cell_idx;
+            double best_score = cur_score;
 
-            // evaluate all ss candidates and find best
-            for (double cand : o.ss_delays) {
-                if (std::fabs(cand - cur_ss[static_cast<std::size_t>(b)]) < 1e-12)
+            // 暴力掃描所有真實元件
+            for (int ci = 0; ci < d->n_cells; ci++) {
+                if (ci == orig_cell_idx) continue; // 已經是這個元件就不用測了
+                
+                const PdCell *cand_c = &d->cells[ci];
+                if (br.fanout > cand_c->max_fanout) continue;
+
+                // 🔪 直接修改真實圖形
+                node->cell_idx = ci;
+                std::strncpy(node->cell, cand_c->name, PD_MAX_NAME - 1);
+                node->cell[PD_MAX_NAME - 1] = '\0';
+
+                // 呼叫真實裁判！
+                pd_annotate_clock(d);
+                pd_compute_timing(d);
+
+                double cand_score = lp_compute_score(d->wns_setup_ss, d->tns_setup_ss, d->wns_hold_ff, d->tns_hold_ff, d->total_area,
+                                                     pb->wns_ss_ori, pb->tns_ss_ori, pb->wns_ff_ori, pb->tns_ff_ori, pb->area_ori);
+
+                // Hold-preserving 檢查 (不得比 LP_init 更糟)
+                if (d->wns_hold_ff < lp_init_metrics->wns_hold_ff - eps ||
+                    d->tns_hold_ff < lp_init_metrics->tns_hold_ff - eps) {
                     continue;
-                std::vector<double> trial_ss = cur_ss;
-                std::vector<double> trial_ff = cur_ff;
-                trial_ss[static_cast<std::size_t>(b)] = cand;
-                SaPgCtx trial_ctx;
-                trial_ctx.launch_ff = ctx.launch_ff;
-                trial_ctx.capture_ff = ctx.capture_ff;
-                trial_ctx.ff_path_br = ctx.ff_path_br;
-                trial_ctx.ff_path_off = ctx.ff_path_off;
-                trial_ctx.node_to_ff = ctx.node_to_ff;
-                sa_eval_state(const_cast<LpProblem *>(pb), const_cast<PdDesign *>(d), trial_ss,
-                              trial_ff, dp_ss, dp_ff, &trial_ctx);
+                }
 
-                // hold-preserving vs LP_init
-                if (trial_ctx.wns_ff < lp_init_metrics->wns_hold_ff - eps ||
-                    trial_ctx.tns_ff < lp_init_metrics->tns_hold_ff - eps)
-                    continue;
-
-                double delta = trial_ctx.score - cur_score;
+                double delta = cand_score - cur_score;
                 if (delta > best_delta + 1e-12) {
                     best_delta = delta;
-                    best_ss = std::move(trial_ss);
-                    best_ff = std::move(trial_ff);
-                    best_ctx = trial_ctx;
+                    best_cell_idx = ci;
+                    best_score = cand_score;
                 }
             }
-
-            // evaluate all ff candidates and find best
-            for (double cand : o.ff_delays) {
-                if (std::fabs(cand - cur_ff[static_cast<std::size_t>(b)]) < 1e-12)
-                    continue;
-                std::vector<double> trial_ss = cur_ss;
-                std::vector<double> trial_ff = cur_ff;
-                trial_ff[static_cast<std::size_t>(b)] = cand;
-                SaPgCtx trial_ctx;
-                trial_ctx.launch_ff = ctx.launch_ff;
-                trial_ctx.capture_ff = ctx.capture_ff;
-                trial_ctx.ff_path_br = ctx.ff_path_br;
-                trial_ctx.ff_path_off = ctx.ff_path_off;
-                trial_ctx.node_to_ff = ctx.node_to_ff;
-                sa_eval_state(const_cast<LpProblem *>(pb), const_cast<PdDesign *>(d), trial_ss,
-                              trial_ff, dp_ss, dp_ff, &trial_ctx);
-
-                if (trial_ctx.wns_ff < lp_init_metrics->wns_hold_ff - eps ||
-                    trial_ctx.tns_ff < lp_init_metrics->tns_hold_ff - eps)
-                    continue;
-
-                double delta = trial_ctx.score - cur_score;
-                if (delta > best_delta + 1e-12) {
-                    best_delta = delta;
-                    best_ss = std::move(trial_ss);
-                    best_ff = std::move(trial_ff);
-                    best_ctx = trial_ctx;
-                }
-            }
-
-            // accept best move if found
+            
+            // 迴圈結束，決定這一步要走哪裡
             if (best_delta > 1e-12) {
-                cur_ss = std::move(best_ss);
-                cur_ff = std::move(best_ff);
-                ctx = best_ctx;
-                cur_score = ctx.score;
+                // 找到了更好的，套用最佳解
+                node->cell_idx = best_cell_idx;
+                std::strncpy(node->cell, d->cells[best_cell_idx].name, PD_MAX_NAME - 1);
+                node->cell[PD_MAX_NAME - 1] = '\0';
+                cur_score = best_score;
+                
+                // 順便把 delay 更新進 cur_ss/ff 以便傳回 main
+                cur_ss[b] = lp_eval_branch_delay_ss(d, &d->cells[best_cell_idx], br.fanout);
+                cur_ff[b] = lp_eval_branch_delay_ff(d, &d->cells[best_cell_idx], br.fanout);
+                
                 improved = true;
+            } else {
+                // 沒有找到更好的，還原回原本的元件
+                node->cell_idx = orig_cell_idx;
+                std::strncpy(node->cell, orig_cell_name, PD_MAX_NAME);
             }
         }
     }
 
-    // prepare metrics
-    LpMetrics greedy_m{};
-    greedy_m.wns_setup_ss = ctx.wns_ss;
-    greedy_m.tns_setup_ss = ctx.tns_ss;
-    greedy_m.wns_hold_ff = ctx.wns_ff;
-    greedy_m.tns_hold_ff = ctx.tns_ff;
-    greedy_m.area = ctx.area;
-    greedy_m.score = ctx.score;
+    std::printf("greedy_post_lp: finished after %d passes.\n", passes);
 
-    // write out result_postlp_greedy_<iters>_t<time>.txt in result_dir
+    // 再次執行最後的真實時序計算，確保結果是最新的
+    pd_annotate_clock(d);
+    pd_compute_timing(d);
+
+    // 回傳最佳解陣列給 main.cpp
+    lp_init->d_ss = cur_ss;
+    lp_init->d_ff = cur_ff;
+
+    LpMetrics greedy_m{};
+    greedy_m.wns_setup_ss = d->wns_setup_ss;
+    greedy_m.tns_setup_ss = d->tns_setup_ss;
+    greedy_m.wns_hold_ff = d->wns_hold_ff;
+    greedy_m.tns_hold_ff = d->tns_hold_ff;
+    greedy_m.area = d->total_area;
+    greedy_m.score = cur_score;
+
     char time_label[32];
-    if (std::fabs(time_limit_sec - std::round(time_limit_sec)) < 1e-6)
-        std::snprintf(time_label, sizeof(time_label), "%.0f", time_limit_sec);
-    else
-        std::snprintf(time_label, sizeof(time_label), "%.1f", time_limit_sec);
-    for (char *p = time_label; *p; ++p) {
-        if (*p == '.')
-            *p = 'p';
-    }
+    std::snprintf(time_label, sizeof(time_label), "%.1f", time_limit_sec);
+    for (char *p = time_label; *p; ++p) if (*p == '.') *p = 'p';
 
     char basename[128];
     std::snprintf(basename, sizeof(basename), "greedy_postlp_bestimpr_t%s.txt", time_label);
     char path[1024];
-    if (pd_join_path(path, sizeof(path), result_dir, basename) != 0) {
-        if (err && err_sz > 0)
-            std::snprintf(err, err_sz, "result path too long");
-        return -1;
-    }
-
-    int suffix = 1;
-    while (true) {
-        FILE *f = std::fopen(path, "r");
-        if (!f)
-            break;
-        std::fclose(f);
-        if (std::snprintf(basename, sizeof(basename), "greedy_postlp_bestimpr_t%s_%d.txt",
-                          time_label, suffix) >= (int)sizeof(basename)) {
-            if (err && err_sz > 0)
-                std::snprintf(err, err_sz, "result basename too long");
-            return -1;
-        }
-        if (pd_join_path(path, sizeof(path), result_dir, basename) != 0) {
-            if (err && err_sz > 0)
-                std::snprintf(err, err_sz, "result path too long");
-            return -1;
-        }
-        suffix++;
-    }
-
+    pd_join_path(path, sizeof(path), result_dir, basename);
+    
     FILE *fp = std::fopen(path, "w");
-    if (!fp) {
-        if (err && err_sz > 0)
-            std::snprintf(err, err_sz, "cannot open %s for write", path);
-        return -1;
+    if (fp) {
+        std::fprintf(fp, "greedy_postlp result\n");
+        std::fprintf(fp, "testcase_dir: %s\n", testcase_dir);
+        std::fprintf(fp, "time_limit_sec: %.1f\n", time_limit_sec);
+        std::fprintf(fp, "lp_init_ok: 1\n");
+        std::fprintf(fp, "greedy_elapsed_sec: %.3f\n", elapsed_sec(t0));
+        std::fprintf(fp, "solver: greedy_post_lp\n\n");
+
+        std::fprintf(fp, "=== baseline (ori) ===\n");
+        std::fprintf(fp, "SS setup WNS : %.6f  TNS : %.6f\n", pb->wns_ss_ori, pb->tns_ss_ori);
+        std::fprintf(fp, "FF hold  WNS : %.6f  TNS : %.6f\n", pb->wns_ff_ori, pb->tns_ff_ori);
+        std::fprintf(fp, "Total area   : %.6f\n", pb->area_ori);
+        std::fprintf(fp, "Score (a=0.6, b=0.2, g=0.2): %.6f\n\n", 0.0);
+
+        std::fprintf(fp, "=== after LP init ===\n");
+        std::fprintf(fp, "SS setup WNS : %.6f  TNS : %.6f\n", lp_init_metrics->wns_setup_ss, lp_init_metrics->tns_setup_ss);
+        std::fprintf(fp, "FF hold  WNS : %.6f  TNS : %.6f\n", lp_init_metrics->wns_hold_ff, lp_init_metrics->tns_hold_ff);
+        std::fprintf(fp, "Total area   : %.6f\n", lp_init_metrics->area);
+        std::fprintf(fp, "Score (a=0.6, b=0.2, g=0.2): %.6f\n\n", lp_init_metrics->score);
+
+        std::fprintf(fp, "=== after greedy ===\n");
+        std::fprintf(fp, "SS setup WNS : %.6f  TNS : %.6f\n", greedy_m.wns_setup_ss, greedy_m.tns_setup_ss);
+        std::fprintf(fp, "FF hold  WNS : %.6f  TNS : %.6f\n", greedy_m.wns_hold_ff, greedy_m.tns_hold_ff);
+        std::fprintf(fp, "Total area   : %.6f\n", greedy_m.area);
+        std::fprintf(fp, "Score (a=0.6, b=0.2, g=0.2): %.6f\n", greedy_m.score);
+        std::fclose(fp);
     }
-
-    std::fprintf(fp, "greedy_postlp result\n");
-    std::fprintf(fp, "testcase_dir: %s\n", testcase_dir);
-    std::fprintf(fp, "time_limit_sec: %.1f\n", time_limit_sec);
-    std::fprintf(fp, "lp_init_ok: 1\n");
-    std::fprintf(fp, "greedy_elapsed_sec: %.3f\n", elapsed_sec(t0));
-    std::fprintf(fp, "greedy_elapsed_time: %.3f sec\n", elapsed_sec(t0));
-    std::fprintf(fp, "solver: greedy_post_lp\n");
-    std::fprintf(fp, "solver_status: 0\n\n");
-
-    std::fprintf(fp, "=== baseline (ori) ===\n");
-    // baseline available from pb via ori-like values
-    std::fprintf(fp, "SS setup WNS : %.6f  TNS : %.6f\n", pb->wns_ss_ori, pb->tns_ss_ori);
-    std::fprintf(fp, "FF hold  WNS : %.6f  TNS : %.6f\n", pb->wns_ff_ori, pb->tns_ff_ori);
-    std::fprintf(fp, "Total area   : %.6f\n", pb->area_ori);
-    std::fprintf(fp, "Score (a=b=g=1): %.6f\n\n", 0.0);
-
-    std::fprintf(fp, "=== after LP init ===\n");
-    std::fprintf(fp, "SS setup WNS : %.6f  TNS : %.6f\n", lp_init_metrics->wns_setup_ss,
-                    lp_init_metrics->tns_setup_ss);
-    std::fprintf(fp, "FF hold  WNS : %.6f  TNS : %.6f\n", lp_init_metrics->wns_hold_ff,
-                    lp_init_metrics->tns_hold_ff);
-    std::fprintf(fp, "Total area   : %.6f\n", lp_init_metrics->area);
-    std::fprintf(fp, "Score (a=b=g=1): %.6f\n\n", lp_init_metrics->score);
-
-    std::fprintf(fp, "=== after greedy ===\n");
-    std::fprintf(fp, "SS setup WNS : %.6f  TNS : %.6f\n", greedy_m.wns_setup_ss, greedy_m.tns_setup_ss);
-    std::fprintf(fp, "FF hold  WNS : %.6f  TNS : %.6f\n", greedy_m.wns_hold_ff, greedy_m.tns_hold_ff);
-    std::fprintf(fp, "Total area   : %.6f\n", greedy_m.area);
-    std::fprintf(fp, "Score (a=b=g=1): %.6f\n", greedy_m.score);
-
-    std::fclose(fp);
     return 0;
 }
