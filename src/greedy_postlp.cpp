@@ -78,6 +78,41 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
     pd_compute_timing(d);
     double cur_score = lp_compute_score(d->wns_setup_ss, d->tns_setup_ss, d->wns_hold_ff, d->tns_hold_ff, d->total_area,
                                         pb->wns_ss_ori, pb->tns_ss_ori, pb->wns_ff_ori, pb->tns_ff_ori, pb->area_ori);
+    
+    // =========================================================================
+    // 🛡️ 拒絕 LP 毒藥：如果 LP 搞砸了 (真實分數 < 0)，直接時光倒流回 Baseline！
+    // =========================================================================
+    if (cur_score < 0.0) {
+        std::printf("greedy_post_lp: LP Init score (%.6f) is worse than Baseline. Reverting to Baseline...\n", cur_score);
+        for (int b = 0; b < n_br; b++) {
+            const LpBranch &br = pb->branches[b];
+            if (br.kind != LpBranchKind::ExistingBuf) continue;
+            
+            PdNode *node = &d->nodes[br.child_node];
+            if (node->kind == PD_NODE_BUF) {
+                // 還原為最原始的元件尺寸 (Baseline)
+                node->cell_idx = br.cell_idx; 
+                std::strncpy(node->cell, d->cells[br.cell_idx].name, PD_MAX_NAME - 1);
+                node->cell[PD_MAX_NAME - 1] = '\0';
+                
+                // 更新當前的 delay 陣列，讓它跟圖形同步
+                cur_ss[b] = lp_eval_branch_delay_ss(d, &d->cells[br.cell_idx], br.fanout);
+                cur_ff[b] = lp_eval_branch_delay_ff(d, &d->cells[br.cell_idx], br.fanout);
+            }
+        }
+        
+        // 重新呼叫真實裁判計分 (此時分數應該會剛好歸零，等於 Baseline 的 0.0 分)
+        pd_annotate_clock(d);
+        pd_compute_timing(d);
+        cur_score = lp_compute_score(d->wns_setup_ss, d->tns_setup_ss, d->wns_hold_ff, d->tns_hold_ff, d->total_area,
+                                     pb->wns_ss_ori, pb->tns_ss_ori, pb->wns_ff_ori, pb->tns_ff_ori, pb->area_ori);
+        std::printf("greedy_post_lp: Revert complete. New starting score: %.6f\n", cur_score);
+        
+        // 🚨 重要：更新傳入的 lp_init_metrics，這樣底下的 Hold-preserving 才會以 0 分的 Baseline 為防守基準
+        const_cast<LpMetrics*>(lp_init_metrics)->wns_hold_ff = d->wns_hold_ff;
+        const_cast<LpMetrics*>(lp_init_metrics)->tns_hold_ff = d->tns_hold_ff;
+    }
+    // =========================================================================
 
     const Clock::time_point t0 = Clock::now();
     bool improved = true;
