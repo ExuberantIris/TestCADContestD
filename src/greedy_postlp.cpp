@@ -11,7 +11,6 @@
 #include <cstdio>
 #include <cstring>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 using Clock = std::chrono::steady_clock;
@@ -56,48 +55,40 @@ static void recompute_path_slacks(PdDesign *d, int path_idx)
     p->slack_hold_ff = p->data_ff - d->t_hold - skew_ff;
 }
 
-static void recompute_timing_for_nodes(PdDesign *d, const std::unordered_set<int> &affected_nodes)
+// 🚀 優化三：極速時序更新 (扁平陣列掃描取代 Set 查找)
+static void recompute_timing_for_branch(PdDesign *d, const std::vector<int> &affected_paths)
 {
-    int has_setup = 0;
-    int has_hold = 0;
+    // 1. 精準只更新受影響的路徑
+    for (int p : affected_paths) {
+        recompute_path_slacks(d, p);
+    }
 
-    d->wns_setup_ss = 1e30;
-    d->tns_setup_ss = 0.0;
-    d->wns_hold_ff = 1e30;
-    d->tns_hold_ff = 0.0;
+    // 2. 靠著 C++ 連續陣列的高速快取 (Cache Locality) 重算全場 WNS/TNS
+    double wns_setup = 1e30, tns_setup = 0.0;
+    double wns_hold = 1e30, tns_hold = 0.0;
+    int has_setup = 0, has_hold = 0;
 
     for (int i = 0; i < d->n_paths; i++) {
-        PdPath *p = &d->paths[i];
-        if (affected_nodes.count(p->launch_id) || affected_nodes.count(p->capture_id))
-            recompute_path_slacks(d, i);
+        const PdPath &p = d->paths[i];
+        if (p.launch_id >= 0 && p.capture_id >= 0) {
+            if (p.slack_setup_ss < wns_setup) wns_setup = p.slack_setup_ss;
+            if (p.slack_setup_ss < 0.0) tns_setup += p.slack_setup_ss;
 
-        if (p->launch_id < 0 || p->capture_id < 0)
-            continue;
+            if (p.slack_hold_ff < wns_hold) wns_hold = p.slack_hold_ff;
+            if (p.slack_hold_ff < 0.0) tns_hold += p.slack_hold_ff;
 
-        if (p->slack_setup_ss < d->wns_setup_ss)
-            d->wns_setup_ss = p->slack_setup_ss;
-        if (p->slack_setup_ss < 0.0)
-            d->tns_setup_ss += p->slack_setup_ss;
-
-        if (p->slack_hold_ff < d->wns_hold_ff)
-            d->wns_hold_ff = p->slack_hold_ff;
-        if (p->slack_hold_ff < 0.0)
-            d->tns_hold_ff += p->slack_hold_ff;
-
-        has_setup = 1;
-        has_hold = 1;
+            has_setup = 1;
+            has_hold = 1;
+        }
     }
 
-    if (!has_setup) {
-        d->wns_setup_ss = 0.0;
-        d->tns_setup_ss = 0.0;
-    }
-    if (!has_hold) {
-        d->wns_hold_ff = 0.0;
-        d->tns_hold_ff = 0.0;
-    }
+    d->wns_setup_ss = has_setup ? wns_setup : 0.0;
+    d->tns_setup_ss = has_setup ? tns_setup : 0.0;
+    d->wns_hold_ff = has_hold ? wns_hold : 0.0;
+    d->tns_hold_ff = has_hold ? tns_hold : 0.0;
 }
 
+// 🚀 優化二：拿掉耗時的字串拷貝，專心做數值更新
 static void apply_cell_to_branch(PdDesign *d, const LpBranch &br, int cell_idx,
                                  std::vector<double> *cur_ss, std::vector<double> *cur_ff, int b)
 {
@@ -106,8 +97,6 @@ static void apply_cell_to_branch(PdDesign *d, const LpBranch &br, int cell_idx,
         return;
 
     node->cell_idx = cell_idx;
-    std::strncpy(node->cell, d->cells[cell_idx].name, PD_MAX_NAME - 1);
-    node->cell[PD_MAX_NAME - 1] = '\0';
     (*cur_ss)[static_cast<std::size_t>(b)] =
         lp_eval_branch_delay_ss(d, &d->cells[cell_idx], br.fanout);
     (*cur_ff)[static_cast<std::size_t>(b)] =
@@ -195,8 +184,11 @@ static void sync_graph_from_delays(PdDesign *d, const LpProblem *pb, std::vector
             }
         }
 
-        if (best_ci >= 0)
+        if (best_ci >= 0) {
             apply_cell_to_branch(d, br, best_ci, cur_ss, cur_ff, b);
+            std::strncpy(d->nodes[br.child_node].cell, d->cells[best_ci].name, PD_MAX_NAME - 1);
+            d->nodes[br.child_node].cell[PD_MAX_NAME - 1] = '\0';
+        }
     }
 }
 
@@ -206,7 +198,7 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
                    const LpMetrics *lp_init_metrics, double time_limit_sec,
                    const Clock::time_point wall_deadline, char *err, std::size_t err_sz)
 {
-    std::printf("greedy_post_lp: entry (P0: deadline + pruned candidates + subtree timing)\n");
+    std::printf("greedy_post_lp: entry (V2: High Performance Cache + Zero String Copy)\n");
 
     if (!pb || !d_const || !lp_init || !lp_init_metrics || !result_dir) {
         if (err && err_sz > 0)
@@ -228,9 +220,6 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
         return -1;
     }
 
-    std::printf("greedy_post_lp: budget %.1fs, wall remaining %.1fs\n", time_limit_sec,
-                std::chrono::duration<double>(wall_deadline - Clock::now()).count());
-
     std::printf("greedy_post_lp: syncing graph to LP init...\n");
     sync_graph_from_delays(d, pb, &cur_ss, &cur_ff);
 
@@ -239,24 +228,47 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
     double cur_score = score_design(pb, d);
 
     if (cur_score < 0.0) {
-        std::printf("greedy_post_lp: LP init score (%.6f) worse than baseline; reverting\n",
-                    cur_score);
+        std::printf("greedy_post_lp: LP init score worse than baseline; reverting\n");
         for (int b = 0; b < n_br; b++) {
             const LpBranch &br = pb->branches[static_cast<std::size_t>(b)];
             if (br.kind != LpBranchKind::ExistingBuf || br.cell_idx < 0)
                 continue;
             apply_cell_to_branch(d, br, br.cell_idx, &cur_ss, &cur_ff, b);
+            std::strncpy(d->nodes[br.child_node].cell, d->cells[br.cell_idx].name, PD_MAX_NAME - 1);
+            d->nodes[br.child_node].cell[PD_MAX_NAME - 1] = '\0';
         }
         pd_annotate_clock(d);
         refresh_design_timing(d);
         cur_score = score_design(pb, d);
         const_cast<LpMetrics *>(lp_init_metrics)->wns_hold_ff = d->wns_hold_ff;
         const_cast<LpMetrics *>(lp_init_metrics)->tns_hold_ff = d->tns_hold_ff;
-        std::printf("greedy_post_lp: revert complete, starting score %.6f\n", cur_score);
     }
 
     std::vector<std::vector<int>> branch_candidates;
     build_branch_candidates(d, pb, &branch_candidates);
+
+    // 🚀 優化一：在迴圈外預先算好「每個 Branch 會影響到哪幾條 Path」
+    std::vector<std::vector<int>> branch_affected_paths(n_br);
+    for (int b = 0; b < n_br; b++) {
+        const LpBranch &br = pb->branches[static_cast<std::size_t>(b)];
+        if (br.kind != LpBranchKind::ExistingBuf) continue;
+
+        std::vector<int> subtree;
+        collect_subtree_nodes(d, br.child_node, &subtree);
+
+        std::vector<bool> is_ff_affected(d->n_nodes, false);
+        for (int nid : subtree) {
+            if (d->nodes[nid].kind == PD_NODE_FF) is_ff_affected[nid] = true;
+        }
+
+        for (int p = 0; p < d->n_paths; p++) {
+            const PdPath &path = d->paths[p];
+            if ((path.launch_id >= 0 && is_ff_affected[path.launch_id]) ||
+                (path.capture_id >= 0 && is_ff_affected[path.capture_id])) {
+                branch_affected_paths[b].push_back(p);
+            }
+        }
+    }
 
     const Clock::time_point t0 = Clock::now();
     bool improved = true;
@@ -270,40 +282,29 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
 
         for (int b = 0; b < n_br && before_deadline(wall_deadline); b++) {
             const LpBranch &br = pb->branches[static_cast<std::size_t>(b)];
-            if (br.kind != LpBranchKind::ExistingBuf)
-                continue;
+            if (br.kind != LpBranchKind::ExistingBuf) continue;
 
             PdNode *node = &d->nodes[br.child_node];
-            if (node->kind != PD_NODE_BUF)
-                continue;
+            if (node->kind != PD_NODE_BUF) continue;
 
             const int orig_cell_idx = node->cell_idx;
             const std::vector<int> &cands = branch_candidates[static_cast<std::size_t>(b)];
-            if (cands.size() <= 1)
-                continue;
+            if (cands.size() <= 1) continue;
 
             double best_delta = 0.0;
             int best_cell_idx = orig_cell_idx;
             double best_score = cur_score;
 
-            std::vector<int> subtree_nodes;
-            collect_subtree_nodes(d, br.child_node, &subtree_nodes);
-            std::unordered_set<int> affected_nodes;
-            for (int nid : subtree_nodes) {
-                const PdNode *n = &d->nodes[nid];
-                if (n->kind == PD_NODE_FF)
-                    affected_nodes.insert(nid);
-            }
+            // 直接拿出預先算好的受影響路徑名單 (完全消除 HashSet 開銷)
+            const std::vector<int> &affected_paths = branch_affected_paths[b];
 
             for (int ci : cands) {
-                if (ci == orig_cell_idx)
-                    continue;
-                if (!before_deadline(wall_deadline))
-                    break;
+                if (ci == orig_cell_idx) continue;
+                if (!before_deadline(wall_deadline)) break;
 
                 apply_cell_to_branch(d, br, ci, &cur_ss, &cur_ff, b);
                 pd_annotate_clock_subtree(d, br.child_node);
-                recompute_timing_for_nodes(d, affected_nodes);
+                recompute_timing_for_branch(d, affected_paths);
                 timing_evals++;
 
                 const double cand_score = score_design(pb, d);
@@ -317,14 +318,18 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
 
             if (best_delta > 1e-12) {
                 apply_cell_to_branch(d, br, best_cell_idx, &cur_ss, &cur_ff, b);
+                // 確定要套用了，才花時間拷貝字串
+                std::strncpy(node->cell, d->cells[best_cell_idx].name, PD_MAX_NAME - 1);
+                node->cell[PD_MAX_NAME - 1] = '\0';
+                
                 pd_annotate_clock_subtree(d, br.child_node);
-                recompute_timing_for_nodes(d, affected_nodes);
+                recompute_timing_for_branch(d, affected_paths);
                 cur_score = best_score;
                 improved = true;
             } else {
                 apply_cell_to_branch(d, br, orig_cell_idx, &cur_ss, &cur_ff, b);
                 pd_annotate_clock_subtree(d, br.child_node);
-                recompute_timing_for_nodes(d, affected_nodes);
+                recompute_timing_for_branch(d, affected_paths);
             }
         }
     }

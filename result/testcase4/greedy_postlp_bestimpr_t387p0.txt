@@ -1,15 +1,10 @@
-sa_solver_prime result
+greedy_postlp result
 testcase_dir: testcase/testcase4
-time_limit_sec: 600.0
-sa_phase_limit_sec: 555.0
-lp_init_sec: 23.811
+time_limit_sec: 387.0
 lp_init_ok: 1
-wall_elapsed_sec: 595.306
-sa_elapsed_sec: 411.044
-sa_iterations: 0
-use_second_best: 0
-solver: Greedy_Best_Impr
-solver_status: 1
+greedy_elapsed_sec: 360.449
+timing_evals: 95406
+solver: greedy_post_lp
 
 === baseline (ori) ===
 SS setup WNS : -0.593800  TNS : -2277.689600
@@ -23,7 +18,7 @@ FF hold  WNS : -0.121700  TNS : -6.987100
 Total area   : 10408.112120
 Score (a=0.6, b=0.2, g=0.2): 0.003735
 
-=== after optimize ===
+=== after greedy ===
 SS setup WNS : -0.470700  TNS : -556.107100
 FF hold  WNS : -0.044600  TNS : -0.765800
 Total area   : 6901.138320

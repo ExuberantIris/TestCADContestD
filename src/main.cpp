@@ -192,8 +192,9 @@ int main(int argc, char **argv)
             for (int ci = 0; ci < design.n_cells; ci++) {
                 if (br.fanout > design.cells[ci].max_fanout) continue;
                 double css = lp_eval_branch_delay_ss(&design, &design.cells[ci], br.fanout);
-                if (std::fabs(css - target_ss) < min_err) {
-                    min_err = std::fabs(css - target_ss);
+                double err = std::fabs(css - target_ss);
+                if (err < min_err) {
+                    min_err = err;
                     best_ci = ci;
                 }
             }
