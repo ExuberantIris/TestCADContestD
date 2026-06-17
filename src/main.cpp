@@ -15,6 +15,19 @@
 #include <sys/stat.h>
 #include <cmath>
 
+namespace {
+
+constexpr double kTailReserveSec = 5.0;
+
+using SteadyClock = std::chrono::steady_clock;
+
+static double remaining_wall_sec(const SteadyClock::time_point &deadline)
+{
+    return std::chrono::duration<double>(deadline - SteadyClock::now()).count();
+}
+
+} // namespace
+
 static void read_time_limit(LpProblem *pb)
 {
     const char *env = std::getenv("SA_TIME_LIMIT");
@@ -77,11 +90,21 @@ int main(int argc, char **argv)
     const double total_limit = problem.time_limit_sec;
     const double lp_init_limit = read_lp_init_limit();
     const double greedy_time_limit = read_greedy_time_limit();
+    const auto wall_deadline =
+        wall_t0 + std::chrono::duration_cast<SteadyClock::duration>(
+                      std::chrono::duration<double>(std::max(0.0, total_limit - kTailReserveSec)));
+
+    const double lp_budget =
+        std::min(lp_init_limit, std::max(0.0, remaining_wall_sec(wall_deadline)));
+    const double greedy_budget_at_start =
+        std::min(greedy_time_limit, std::max(0.0, remaining_wall_sec(wall_deadline)));
 
     std::printf("=== sa_solver (Greedy Focus Version) ===\n");
     std::printf("Input folder: %s\n", testcase_dir);
-    std::printf("Total limit : %.1f sec | LP init: %.1f sec | Greedy: %.1f sec\n",
-                total_limit, lp_init_limit, greedy_time_limit);
+    std::printf("Total limit : %.1f sec | LP init: %.1f sec (budget %.1f) | Greedy cap: %.1f sec\n",
+                total_limit, lp_init_limit, lp_budget, greedy_time_limit);
+    std::printf("Wall deadline: %.1f sec (reserve %.1f sec for output)\n",
+                std::chrono::duration<double>(wall_deadline - wall_t0).count(), kTailReserveSec);
 
     if (pd_load_design(testcase_dir, &design, err, sizeof(err)) != 0) {
         std::fprintf(stderr, "Load failed: %s\n", err);
@@ -127,7 +150,7 @@ int main(int argc, char **argv)
     // ---------------------------------------------------------
     // Phase 1: LP Init
     // ---------------------------------------------------------
-    if (lp_solve_mo_init(&problem, &design, &lp_init, lp_init_limit, err, sizeof(err)) == 0 &&
+    if (lp_solve_mo_init(&problem, &design, &lp_init, lp_budget, err, sizeof(err)) == 0 &&
         !lp_init.d_ss.empty()) {
         initial.d_ss = lp_init.d_ss;
         initial.d_ff = lp_init.d_ff;
@@ -204,11 +227,13 @@ int main(int argc, char **argv)
     // Phase 2: Greedy Local Search
     // ---------------------------------------------------------
     if (sa_result.lp_init_ok) {
-        std::printf("Running greedy_post_lp (no hold-preserving)...\n");
-        // 注意：待會我們改 greedy_postlp.cpp 時，要把 lp_init 的 const 拿掉
-        // 讓 greedy 可以把算出來的最佳解直接寫回 lp_init 裡面
-        if (greedy_post_lp(argv[2], testcase_dir, &problem, &design, &dp_ss, &dp_ff,
-                           &lp_init, &lp_init_metrics, greedy_time_limit, err,
+        const double greedy_budget =
+            std::min(greedy_time_limit, std::max(0.0, remaining_wall_sec(wall_deadline)));
+        std::printf("Running greedy_post_lp (budget %.1fs, wall remaining %.1fs)...\n",
+                    greedy_budget, remaining_wall_sec(wall_deadline));
+        if (greedy_budget > 0.1 &&
+            greedy_post_lp(argv[2], testcase_dir, &problem, &design, &dp_ss, &dp_ff, &lp_init,
+                           &lp_init_metrics, greedy_budget, wall_deadline, err,
                            sizeof(err)) == 0) {
             std::printf("Greedy optimization finished successfully.\n");
             
@@ -217,9 +242,11 @@ int main(int argc, char **argv)
             sa_result.solution.d_ff = lp_init.d_ff;
             sa_result.solution.status = 1;
             sa_result.solution.solver_name = "Greedy_Best_Impr";
+        } else if (greedy_budget <= 0.1) {
+            std::printf("Greedy skipped: no wall time remaining\n");
+            sa_result.solution = lp_init;
         } else {
             std::fprintf(stderr, "Greedy post-LP failed: %s\n", err);
-            // 失敗就 fallback 到 LP 的解
             sa_result.solution = lp_init;
         }
     } else {
@@ -261,7 +288,7 @@ int main(int argc, char **argv)
         // 寫入 result.txt
         if (lp_write_result_txt(argv[2], testcase_dir, &ori, &lp_init_metrics, &opt,
                                 sa_result.solution.solver_name.c_str(), sa_result.solution.status,
-                                total_limit, greedy_time_limit, sa_result.lp_init_sec,
+                                total_limit, greedy_budget_at_start, sa_result.lp_init_sec,
                                 sa_result.lp_init_ok, sa_result.elapsed_sec, wall_elapsed,
                                 sa_result.iterations, sa_result.use_second_best, err,
                                 sizeof(err)) != 0) {

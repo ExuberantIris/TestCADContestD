@@ -41,17 +41,67 @@ static void annotate_subtree(PdDesign *d, int node_id, double acc_ss, double acc
         annotate_subtree(d, n->children[i], acc_ss, acc_ff);
 }
 
-void pd_annotate_clock(PdDesign *d)
+static void recompute_total_area(PdDesign *d)
 {
     int i;
-
-    if (d->n_nodes == 0)
-        return;
-    annotate_subtree(d, 0, 0.0, 0.0);
 
     d->total_area = 0.0;
     for (i = 0; i < d->n_nodes; i++) {
         if (d->nodes[i].kind == PD_NODE_BUF)
             d->total_area += d->nodes[i].area;
     }
+}
+
+static int acc_at_node(const PdDesign *d, int target, int cur, double acc_ss, double acc_ff,
+                       double *out_ss, double *out_ff)
+{
+    const PdNode *n = &d->nodes[cur];
+    double a_ss = acc_ss;
+    double a_ff = acc_ff;
+    int i;
+
+    if (cur == target) {
+        *out_ss = a_ss;
+        *out_ff = a_ff;
+        return 1;
+    }
+
+    if (n->kind == PD_NODE_BUF) {
+        const PdCell *c = &d->cells[n->cell_idx];
+        const int fo = n->nchildren > 0 ? n->nchildren : 1;
+
+        a_ss += cell_delay(c, fo, 1);
+        a_ff += cell_delay(c, fo, 0);
+    }
+
+    for (i = 0; i < n->nchildren; i++) {
+        if (acc_at_node(d, target, n->children[i], a_ss, a_ff, out_ss, out_ff))
+            return 1;
+    }
+    return 0;
+}
+
+void pd_annotate_clock(PdDesign *d)
+{
+    if (d->n_nodes == 0)
+        return;
+    annotate_subtree(d, 0, 0.0, 0.0);
+    recompute_total_area(d);
+}
+
+void pd_annotate_clock_subtree(PdDesign *d, int node_id)
+{
+    double acc_ss = 0.0;
+    double acc_ff = 0.0;
+
+    if (d->n_nodes == 0)
+        return;
+    if (node_id <= 0) {
+        pd_annotate_clock(d);
+        return;
+    }
+    if (!acc_at_node(d, node_id, 0, 0.0, 0.0, &acc_ss, &acc_ff))
+        return;
+    annotate_subtree(d, node_id, acc_ss, acc_ff);
+    recompute_total_area(d);
 }
