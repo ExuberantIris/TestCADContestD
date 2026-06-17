@@ -2,7 +2,7 @@ greedy_postlp result
 testcase_dir: testcase/testcase2
 time_limit_sec: 555.0
 lp_init_ok: 1
-greedy_elapsed_sec: 4.905
+greedy_elapsed_sec: 5.026
 timing_evals: 76176
 solver: greedy_post_lp
 

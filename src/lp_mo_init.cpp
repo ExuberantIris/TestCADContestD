@@ -196,16 +196,23 @@ int lp_solve_mo_init(LpProblem *pb, const PdDesign *d, LpSolution *sol, double t
     sol->clear();
     LpPgCtx ctx;
     const int n_br = static_cast<int>(pb->branches.size());
+    const int n_ff = static_cast<int>(pb->ff_node_ids.size());
     const double eps = 1e-6;
-    const double step = 0.004;
 
     if (!build_pg_ctx(pb, d, &ctx))
         return -1;
 
     std::vector<double> d_ss(static_cast<std::size_t>(n_br));
     std::vector<double> d_ff(static_cast<std::size_t>(n_br));
+    
+    // g_ss 和 g_ff 現在扮演「動量 (Velocity)」的角色
     std::vector<double> g_ss(static_cast<std::size_t>(n_br), 0.0);
     std::vector<double> g_ff(static_cast<std::size_t>(n_br), 0.0);
+    
+    // 🚀 優化 1-2: 新增 FF 級別的推力暫存陣列 (O(P) + O(F*D) 降維打擊)
+    std::vector<double> ff_push_ss(static_cast<std::size_t>(n_ff), 0.0);
+    std::vector<double> ff_push_ff(static_cast<std::size_t>(n_ff), 0.0);
+
     std::vector<double> best_ss(static_cast<std::size_t>(n_br));
     std::vector<double> best_ff(static_cast<std::size_t>(n_br));
 
@@ -218,11 +225,26 @@ int lp_solve_mo_init(LpProblem *pb, const PdDesign *d, LpSolution *sol, double t
 
     const Clock::time_point t0 = Clock::now();
     const int n_paths = static_cast<int>(pb->path_ids.size());
+    double current_time = 0.0;
 
-    for (int iter = 0; elapsed_sec(t0) < time_limit_sec; iter++) {
-        std::fill(g_ss.begin(), g_ss.end(), 0.0);
-        std::fill(g_ff.begin(), g_ff.end(), 0.0);
+    for (int iter = 0; ; iter++) {
+        // 🚀 優化 1-1: 系統呼叫節流 (每 256 次 Iteration 才向 OS 查一次時間)
+        if ((iter & 255) == 0) {
+            current_time = elapsed_sec(t0);
+            if (current_time >= time_limit_sec) break;
+        }
 
+        // 🚀 優化 2-1: 動量 (Momentum) 衰減，保留 50% 的歷史慣性
+        for (int b = 0; b < n_br; b++) {
+            g_ss[b] *= 0.5;
+            g_ff[b] *= 0.5;
+        }
+
+        // 清空這一回合的 FF 暫存推力
+        std::fill(ff_push_ss.begin(), ff_push_ss.end(), 0.0);
+        std::fill(ff_push_ff.begin(), ff_push_ff.end(), 0.0);
+
+        // 1. 將 Path 的違規梯度，累積到頭尾的 FF 上 (時間複雜度從 O(P*D) 降為 O(P))
         for (int p = 0; p < n_paths; p++) {
             const double ss_sl = ctx.slack_ss[static_cast<std::size_t>(p)];
             const double ff_sl = ctx.slack_ff[static_cast<std::size_t>(p)];
@@ -246,27 +268,38 @@ int lp_solve_mo_init(LpProblem *pb, const PdDesign *d, LpSolution *sol, double t
             const int ci = ctx.capture_ff[static_cast<std::size_t>(p)];
 
             if (ci >= 0) {
-                for (int k = ctx.ff_path_off[static_cast<std::size_t>(ci)];
-                     k < ctx.ff_path_off[static_cast<std::size_t>(ci + 1)]; k++) {
-                    const int b = ctx.ff_path_br[static_cast<std::size_t>(k)];
-                    g_ss[static_cast<std::size_t>(b)] += gw_ss + gt_ss;
-                    g_ff[static_cast<std::size_t>(b)] += gw_ff * 0.5 + gt_ff * 0.5;
-                }
+                ff_push_ss[static_cast<std::size_t>(ci)] += (gw_ss + gt_ss);
+                ff_push_ff[static_cast<std::size_t>(ci)] += (gw_ff * 0.5 + gt_ff * 0.5);
             }
             if (li >= 0) {
-                for (int k = ctx.ff_path_off[static_cast<std::size_t>(li)];
-                     k < ctx.ff_path_off[static_cast<std::size_t>(li + 1)]; k++) {
+                ff_push_ss[static_cast<std::size_t>(li)] -= (gw_ss + gt_ss);
+                ff_push_ff[static_cast<std::size_t>(li)] -= (gw_ff + gt_ff);
+            }
+        }
+
+        // 2. 將 FF 上累積的推力，一次性傳遞給它管轄的 Branches (時間複雜度 O(F*D))
+        for (int f = 0; f < n_ff; f++) {
+            const double p_ss = ff_push_ss[static_cast<std::size_t>(f)];
+            const double p_ff = ff_push_ff[static_cast<std::size_t>(f)];
+            if (p_ss != 0.0 || p_ff != 0.0) {
+                for (int k = ctx.ff_path_off[static_cast<std::size_t>(f)];
+                     k < ctx.ff_path_off[static_cast<std::size_t>(f + 1)]; k++) {
                     const int b = ctx.ff_path_br[static_cast<std::size_t>(k)];
-                    g_ss[static_cast<std::size_t>(b)] -= gw_ss + gt_ss;
-                    g_ff[static_cast<std::size_t>(b)] -= gw_ff + gt_ff;
+                    g_ss[static_cast<std::size_t>(b)] += p_ss;
+                    g_ff[static_cast<std::size_t>(b)] += p_ff;
                 }
             }
         }
 
+        // 🚀 優化 2-2: 退火步長 (Learning Rate Decay)
+        double progress = std::min(1.0, current_time / time_limit_sec);
+        double dynamic_step = 0.01 * (1.0 - progress) + 0.0005 * progress;
+
         for (int b = 0; b < n_br; b++) {
-            d_ss[static_cast<std::size_t>(b)] -= step * g_ss[static_cast<std::size_t>(b)];
-            d_ff[static_cast<std::size_t>(b)] -= step * g_ff[static_cast<std::size_t>(b)];
+            d_ss[static_cast<std::size_t>(b)] -= dynamic_step * g_ss[static_cast<std::size_t>(b)];
+            d_ff[static_cast<std::size_t>(b)] -= dynamic_step * g_ff[static_cast<std::size_t>(b)];
         }
+        
         project_bounds(pb, &d_ss, &d_ff);
         eval_solution(pb, d, d_ss, d_ff, &ctx);
 
@@ -279,7 +312,7 @@ int lp_solve_mo_init(LpProblem *pb, const PdDesign *d, LpSolution *sol, double t
 
     sol->d_ss = best_ss;
     sol->d_ff = best_ff;
-    sol->status = elapsed_sec(t0) >= time_limit_sec - 1e-6 ? 1 : 0;
+    sol->status = current_time >= time_limit_sec - 1e-6 ? 1 : 0;
     sol->solver_name = "mo_projected_gradient";
     return 0;
 }
