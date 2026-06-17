@@ -89,7 +89,7 @@ int main(int argc, char **argv)
 
     const double total_limit = problem.time_limit_sec;
     const double lp_init_limit = read_lp_init_limit();
-    const double greedy_time_limit = read_greedy_time_limit();
+    double greedy_time_limit = read_greedy_time_limit();
     const auto wall_deadline =
         wall_t0 + std::chrono::duration_cast<SteadyClock::duration>(
                       std::chrono::duration<double>(std::max(0.0, total_limit - kTailReserveSec)));
@@ -146,33 +146,32 @@ int main(int argc, char **argv)
     sa_init_from_design(&problem, &design, opts, &initial.d_ss, &initial.d_ff);
 
     const auto lp_t0 = std::chrono::steady_clock::now();
-    
+
     // ---------------------------------------------------------
-    // Phase 1: LP Init
+    // Phase 1: SKIP LP Init (give its budget to greedy)
     // ---------------------------------------------------------
-    if (lp_solve_mo_init(&problem, &design, &lp_init, lp_budget, err, sizeof(err)) == 0 &&
-        !lp_init.d_ss.empty()) {
-        initial.d_ss = lp_init.d_ss;
-        initial.d_ff = lp_init.d_ff;
-        sa_result.lp_init_ok = 1;
-        std::printf("LP init: %s (status=%d)\n", lp_init.solver_name.c_str(), lp_init.status);
-        {
-            SaPgCtx lp_ctx;
-            if (sa_build_ctx(&problem, &design, &lp_ctx)) {
-                sa_eval_state(&problem, &design, lp_init.d_ss, lp_init.d_ff, &dp_ss, &dp_ff, &lp_ctx);
-                lp_init_metrics.wns_setup_ss = lp_ctx.wns_ss;
-                lp_init_metrics.tns_setup_ss = lp_ctx.tns_ss;
-                lp_init_metrics.wns_hold_ff = lp_ctx.wns_ff;
-                lp_init_metrics.tns_hold_ff = lp_ctx.tns_ff;
-                lp_init_metrics.area = lp_ctx.area;
-                lp_init_metrics.score = lp_ctx.score;
-            }
+    // We intentionally skip running the LP initializer and instead give its wall
+    // budget to the greedy phase. Compute metrics for the initial solution
+    // (derived from current design) so greedy_post_lp can use it as start.
+    sa_result.lp_init_ok = 0;
+    sa_result.lp_init_sec = 0.0;
+
+    // increase greedy cap by the lp budget since LP won't run
+    greedy_time_limit += lp_budget;
+
+    // evaluate "initial" solution metrics so greedy can print comparable info
+    {
+        SaPgCtx init_ctx;
+        if (sa_build_ctx(&problem, &design, &init_ctx)) {
+            sa_eval_state(&problem, &design, initial.d_ss, initial.d_ff, &dp_ss, &dp_ff, &init_ctx);
+            lp_init_metrics.wns_setup_ss = init_ctx.wns_ss;
+            lp_init_metrics.tns_setup_ss = init_ctx.tns_ss;
+            lp_init_metrics.wns_hold_ff = init_ctx.wns_ff;
+            lp_init_metrics.tns_hold_ff = init_ctx.tns_ff;
+            lp_init_metrics.area = init_ctx.area;
+            lp_init_metrics.score = init_ctx.score;
         }
-    } else {
-        sa_result.lp_init_ok = 0;
-        std::printf("LP init: skipped/failed, using original clock tree delays\n");
     }
-    sa_result.lp_init_sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - lp_t0).count();
 // 🔪 強制將 LP 初始解轉換為真實圖形，並請出真實裁判計分
     if (sa_result.lp_init_ok) {
         for (std::size_t b = 0; b < problem.branches.size(); b++) {
@@ -224,33 +223,31 @@ int main(int argc, char **argv)
         );
     }
     // ---------------------------------------------------------
-    // Phase 2: Greedy Local Search
+    // Phase 2: Greedy Local Search (always run, using `initial` as start)
     // ---------------------------------------------------------
-    if (sa_result.lp_init_ok) {
+    {
         const double greedy_budget =
             std::min(greedy_time_limit, std::max(0.0, remaining_wall_sec(wall_deadline)));
         std::printf("Running greedy_post_lp (budget %.1fs, wall remaining %.1fs)...\n",
                     greedy_budget, remaining_wall_sec(wall_deadline));
         if (greedy_budget > 0.1 &&
-            greedy_post_lp(argv[2], testcase_dir, &problem, &design, &dp_ss, &dp_ff, &lp_init,
+            greedy_post_lp(argv[2], testcase_dir, &problem, &design, &dp_ss, &dp_ff, &initial,
                            &lp_init_metrics, greedy_budget, wall_deadline, err,
                            sizeof(err)) == 0) {
             std::printf("Greedy optimization finished successfully.\n");
-            
+
             // 將 Greedy 算出來的結果裝進最終要輸出的結構裡
-            sa_result.solution.d_ss = lp_init.d_ss;
-            sa_result.solution.d_ff = lp_init.d_ff;
+            sa_result.solution.d_ss = initial.d_ss;
+            sa_result.solution.d_ff = initial.d_ff;
             sa_result.solution.status = 1;
             sa_result.solution.solver_name = "Greedy_Best_Impr";
         } else if (greedy_budget <= 0.1) {
             std::printf("Greedy skipped: no wall time remaining\n");
-            sa_result.solution = lp_init;
+            sa_result.solution = initial;
         } else {
             std::fprintf(stderr, "Greedy post-LP failed: %s\n", err);
-            sa_result.solution = lp_init;
+            sa_result.solution = initial;
         }
-    } else {
-        sa_result.solution = initial;
     }
     sa_result.elapsed_sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - lp_t0).count();
 

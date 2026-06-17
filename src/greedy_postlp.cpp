@@ -121,9 +121,13 @@ static double score_design(const LpProblem *pb, const PdDesign *d)
                             pb->tns_ff_ori, pb->area_ori);
 }
 
-static void build_branch_candidates(const PdDesign *d, const LpProblem *pb,
+static void build_branch_candidates(const PdDesign *d_in, const LpProblem *pb,
                                     std::vector<std::vector<int>> *candidates)
 {
+    // We will create virtual combo cells by appending to a mutable copy
+    // of the design. This allows representing 2-buffer series combos as
+    // additional candidate "cells" while preserving the original library.
+    PdDesign *d = const_cast<PdDesign *>(d_in);
     const int n_br = static_cast<int>(pb->branches.size());
     candidates->assign(static_cast<std::size_t>(n_br), {});
 
@@ -132,32 +136,95 @@ static void build_branch_candidates(const PdDesign *d, const LpProblem *pb,
         if (br.kind != LpBranchKind::ExistingBuf)
             continue;
 
-        std::unordered_map<long long, int> best_cell;
+        struct Cand {
+            int idx; // index into d->cells
+            double ss;
+            double ff;
+            double area;
+        };
+
+        std::vector<Cand> cand_list;
+
+        // Single-cell candidates (existing library cells)
         for (int ci = 0; ci < d->n_cells; ci++) {
             const PdCell *c = &d->cells[ci];
             if (br.fanout > c->max_fanout)
                 continue;
-
             const double ss = lp_eval_branch_delay_ss(d, c, br.fanout);
             const double ff = lp_eval_branch_delay_ff(d, c, br.fanout);
             if (ss < br.d_ss_min - 1e-9 || ss > br.d_ss_max + 1e-9)
                 continue;
             if (ff < br.d_ff_min - 1e-9 || ff > br.d_ff_max + 1e-9)
                 continue;
-
-            const long long key =
-                (static_cast<long long>(std::llround(ss * 1e9)) << 32) ^
-                static_cast<long long>(std::llround(ff * 1e9));
             const double area = c->width * c->height;
-            const auto it = best_cell.find(key);
-            if (it == best_cell.end() || area < d->cells[it->second].width * d->cells[it->second].height)
-                best_cell[key] = ci;
+            cand_list.push_back({ci, ss, ff, area});
+        }
+
+        // Two-buffer concatenations: first drives second (fanout 1), second drives branch fanout
+        // Iterate over all pairs (i,j) and create virtual cells when within bounds.
+        for (int i = 0; i < d->n_cells; i++) {
+            const PdCell *c1 = &d->cells[i];
+            // c1 drives only the second buffer => fanout 1
+            if (1 > c1->max_fanout) continue;
+            for (int j = 0; j < d->n_cells; j++) {
+                const PdCell *c2 = &d->cells[j];
+                if (br.fanout > c2->max_fanout) continue;
+
+                const double ss = lp_eval_branch_delay_ss(d, c1, 1) + lp_eval_branch_delay_ss(d, c2, br.fanout);
+                const double ff = lp_eval_branch_delay_ff(d, c1, 1) + lp_eval_branch_delay_ff(d, c2, br.fanout);
+                if (ss < br.d_ss_min - 1e-9 || ss > br.d_ss_max + 1e-9) continue;
+                if (ff < br.d_ff_min - 1e-9 || ff > br.d_ff_max + 1e-9) continue;
+
+                const double area = c1->width * c1->height + c2->width * c2->height;
+
+                // create a virtual PdCell entry if there is space
+                if (d->n_cells + 1 < PD_MAX_CELLS) {
+                    PdCell *v = &d->cells[d->n_cells];
+                    char vname[PD_MAX_NAME];
+                    std::snprintf(vname, sizeof(vname), "VCOMBO_%d_%d_b%d", i, j, b);
+                    std::memset(v, 0, sizeof(*v));
+                    std::strncpy(v->name, vname, PD_MAX_NAME - 1);
+                    // store area in width*height (simple packing)
+                    v->width = area;
+                    v->height = 1.0;
+                    v->max_fanout = std::max(1, br.fanout);
+                    // fill delay table: for fanout f, delay = c1(1) + c2(f)
+                    for (int f = 1; f <= v->max_fanout && f <= PD_MAX_FANOUT_TBL; f++) {
+                        v->ss_delay[f - 1] = lp_eval_branch_delay_ss(d, c1, 1) + lp_eval_branch_delay_ss(d, c2, f);
+                        v->ff_delay[f - 1] = lp_eval_branch_delay_ff(d, c1, 1) + lp_eval_branch_delay_ff(d, c2, f);
+                    }
+                    int vidx = d->n_cells;
+                    d->n_cells++;
+                    cand_list.push_back({vidx, ss, ff, area});
+                }
+            }
+        }
+
+        // Prune dominated candidates: if A.area >= B.area and A.ss >= B.ss and A.ff >= B.ff, drop A
+        const double eps = 1e-12;
+        std::vector<int> keep;
+        for (size_t i = 0; i < cand_list.size(); i++) {
+            bool dominated = false;
+            for (size_t j = 0; j < cand_list.size(); j++) {
+                if (i == j) continue;
+                const Cand &A = cand_list[i];
+                const Cand &B = cand_list[j];
+                if (A.area >= B.area - eps && A.ss >= B.ss - eps && A.ff >= B.ff - eps) {
+                    if (A.area > B.area + eps || A.ss > B.ss + eps || A.ff > B.ff + eps) {
+                        dominated = true;
+                        break;
+                    }
+                }
+            }
+            if (!dominated)
+                keep.push_back(static_cast<int>(i));
         }
 
         std::vector<int> &out = (*candidates)[static_cast<std::size_t>(b)];
-        out.reserve(best_cell.size());
-        for (const auto &kv : best_cell)
-            out.push_back(kv.second);
+        out.reserve(keep.size());
+        for (int k : keep)
+            out.push_back(cand_list[static_cast<size_t>(k)].idx);
+
         std::sort(out.begin(), out.end(), [d](int a, int bci) {
             const PdCell *ca = &d->cells[a];
             const PdCell *cb = &d->cells[bci];
