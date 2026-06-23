@@ -14,3 +14,5 @@ Testcase	Baseline	New	Δ
 3	0.932437	0.959930	+0.028
 4	0.962959	1.090397	+0.127
 Total	5.053895	5.257547	+0.204 (+4.0%)
+
+issue not solved: an O(n_paths) full rescan inside recompute_timing_for_branch on every single candidate evaluation, plus expensive subtree re-annotation for branches near the root
