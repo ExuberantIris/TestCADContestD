@@ -1,3 +1,18 @@
+********** 0624 07:23 **********
+Summary
+1. Rewrote the hot loop in greedy_postlp.cpp: replaced the O(n_paths) full rescan + O(subtree) re-annotation on every single candidate try with closed-form incremental tracking — resizing a buffer shifts its entire subtree's clock latency by the same delta, so each affected path's new slack is computed analytically (sign = whether launch/capture is downstream), with a running multiset for WNS and running sum for TNS. Per-pass authoritative resync bounds any drift to within one pass.
+
+2. This exposed a real, pre-existing bug in lp_branch.cpp: add_branch computed each buffer's fanout from its parent's child count instead of its own. The official timing engine (pd_clock.c) was never affected (it always uses each node's own nchildren), so final scores were always computed correctly — but the LP-side code (candidate generation, LP-init bounds, nearest-cell matching) was using the wrong fanout throughout. My old slow code never noticed because it always re-derived the real answer from the official engine on every step; my new incremental code trusts br.fanout directly, which made the bug immediately visible as score oscillation and eventually a heap corruption crash. Fixed: cn->nchildren instead of pn->nchildren.
+
+Testcase	Baseline	Final	Δ
+0	0.972056	1.001531	+0.029
+1	1.036434	1.030964	−0.0055
+2	1.150009	1.180906	+0.031
+3	0.932437	0.961761	+0.029
+4	0.962959	1.140082	+0.177
+Total	5.053895	5.315244	+0.261 (+5.2%)
+
+
 ********** 0624 05:41 **********
 What changed (4 files):
 src/lp_mo_init.cpp — replaced the ad-hoc momentum/gradient heuristic with an exact algorithm: setup(SS) and hold(FF) decompose into independent problems (disjoint variables), each solved by bisecting the achievable WNS threshold and checking feasibility via SPFA negative-cycle detection on the tree's difference-constraint graph. Solved in coordinates relative to the original design so it only touches branches a real constraint forces it to move — not an arbitrary lazy/extremal point.

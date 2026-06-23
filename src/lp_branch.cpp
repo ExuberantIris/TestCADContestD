@@ -63,8 +63,11 @@ void lp_cell_delay_bounds(const PdDesign *d, int /*cell_idx*/, int fanout, doubl
 static void add_branch(LpProblem *pb, int parent, int child, LpBranchKind kind, PdDesign *d)
 {
     const PdNode *cn = &d->nodes[child];
-    const PdNode *pn = &d->nodes[parent];
-    const int fanout = pn->nchildren > 0 ? pn->nchildren : 1;
+    // For an ExistingBuf branch, `child` *is* the buffer being characterized, so its delay
+    // depends on its own fanout (how many things it drives), matching pd_clock.c's
+    // annotate_subtree which sets n->fanout = n->nchildren on the node being visited - not the
+    // parent's fanout.
+    const int fanout = cn->nchildren > 0 ? cn->nchildren : 1;
 
     LpBranch b;
     b.parent_node = parent;

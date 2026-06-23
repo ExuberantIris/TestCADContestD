@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <set>
 #include <unordered_map>
 #include <vector>
 
@@ -38,54 +39,51 @@ static void refresh_design_timing(PdDesign *d)
     pd_compute_timing(d);
 }
 
-static void recompute_path_slacks(PdDesign *d, int path_idx)
+/** A path whose slack changes when a given branch's delay changes by some delta. Resizing a
+ *  buffer shifts the accumulated clock latency of its *entire* subtree by the same amount, so
+ *  a path is only affected through whichever endpoint (launch/capture) lies in that subtree;
+ *  sign is +1 if the capture FF is downstream, -1 if the launch FF is downstream. If *both*
+ *  endpoints are downstream the shift cancels exactly, so such paths are dropped (sign 0). */
+struct AffectedPath {
+    int path_idx;
+    int sign;
+};
+
+static double multiset_min_or_zero(const std::multiset<double> &s)
 {
-    PdPath *p = &d->paths[path_idx];
-    const PdNode *launch = (p->launch_id >= 0) ? &d->nodes[p->launch_id] : nullptr;
-    const PdNode *capture = (p->capture_id >= 0) ? &d->nodes[p->capture_id] : nullptr;
-    double skew_ss = 0.0;
-    double skew_ff = 0.0;
-
-    if (launch && capture) {
-        skew_ss = capture->d_clk_ss - launch->d_clk_ss;
-        skew_ff = capture->d_clk_ff - launch->d_clk_ff;
-    }
-
-    p->slack_setup_ss = d->clock_period - d->t_setup - p->data_ss + skew_ss;
-    p->slack_hold_ff = p->data_ff - d->t_hold - skew_ff;
+    return s.empty() ? 0.0 : *s.begin();
 }
 
-// 🚀 優化三：極速時序更新 (扁平陣列掃描取代 Set 查找)
-static void recompute_timing_for_branch(PdDesign *d, const std::vector<int> &affected_paths)
+/** Applies delta_ss/delta_ff to every path in `affected` (per AffectedPath::sign) and keeps
+ *  the running multisets/TNS totals in sync. Calling this again with the negated deltas
+ *  exactly undoes it, which is how candidate evaluation stays O(|affected|) instead of
+ *  O(n_paths): try a delta, read the score, then undo it - all without ever re-deriving
+ *  anything from d_clk_ss/d_clk_ff or re-walking the subtree. */
+static void apply_affected_delta(PdDesign *d, const std::vector<AffectedPath> &affected,
+                                 double delta_ss, double delta_ff,
+                                 std::multiset<double> *setup_slacks,
+                                 std::multiset<double> *hold_slacks, double *tns_setup_total,
+                                 double *tns_hold_total)
 {
-    // 1. 精準只更新受影響的路徑
-    for (int p : affected_paths) {
-        recompute_path_slacks(d, p);
+    for (const AffectedPath &ap : affected) {
+        PdPath &p = d->paths[static_cast<std::size_t>(ap.path_idx)];
+
+        const double old_setup = p.slack_setup_ss;
+        const double new_setup = old_setup + ap.sign * delta_ss;
+        setup_slacks->erase(setup_slacks->find(old_setup));
+        if (old_setup < 0.0) *tns_setup_total -= old_setup;
+        setup_slacks->insert(new_setup);
+        if (new_setup < 0.0) *tns_setup_total += new_setup;
+        p.slack_setup_ss = new_setup;
+
+        const double old_hold = p.slack_hold_ff;
+        const double new_hold = old_hold - ap.sign * delta_ff;
+        hold_slacks->erase(hold_slacks->find(old_hold));
+        if (old_hold < 0.0) *tns_hold_total -= old_hold;
+        hold_slacks->insert(new_hold);
+        if (new_hold < 0.0) *tns_hold_total += new_hold;
+        p.slack_hold_ff = new_hold;
     }
-
-    // 2. 靠著 C++ 連續陣列的高速快取 (Cache Locality) 重算全場 WNS/TNS
-    double wns_setup = 1e30, tns_setup = 0.0;
-    double wns_hold = 1e30, tns_hold = 0.0;
-    int has_setup = 0, has_hold = 0;
-
-    for (int i = 0; i < d->n_paths; i++) {
-        const PdPath &p = d->paths[i];
-        if (p.launch_id >= 0 && p.capture_id >= 0) {
-            if (p.slack_setup_ss < wns_setup) wns_setup = p.slack_setup_ss;
-            if (p.slack_setup_ss < 0.0) tns_setup += p.slack_setup_ss;
-
-            if (p.slack_hold_ff < wns_hold) wns_hold = p.slack_hold_ff;
-            if (p.slack_hold_ff < 0.0) tns_hold += p.slack_hold_ff;
-
-            has_setup = 1;
-            has_hold = 1;
-        }
-    }
-
-    d->wns_setup_ss = has_setup ? wns_setup : 0.0;
-    d->tns_setup_ss = has_setup ? tns_setup : 0.0;
-    d->wns_hold_ff = has_hold ? wns_hold : 0.0;
-    d->tns_hold_ff = has_hold ? tns_hold : 0.0;
 }
 
 // 🚀 優化二：拿掉耗時的字串拷貝，專心做數值更新
@@ -252,31 +250,55 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
     // Without it, this loop allocated an O(n_nodes) bitmap and rescanned all n_paths paths for
     // *every* branch (O(n_branches*(n_nodes+n_paths))), which dwarfs everything else on large
     // testcases (tens of thousands of branches x hundreds of thousands of paths).
-    std::vector<std::vector<int>> ff_to_paths(d->n_nodes);
+    std::vector<std::vector<int>> launch_paths(d->n_nodes);
+    std::vector<std::vector<int>> capture_paths(d->n_nodes);
     for (int p = 0; p < d->n_paths; p++) {
         const PdPath &path = d->paths[p];
         if (path.launch_id >= 0)
-            ff_to_paths[static_cast<std::size_t>(path.launch_id)].push_back(p);
-        if (path.capture_id >= 0 && path.capture_id != path.launch_id)
-            ff_to_paths[static_cast<std::size_t>(path.capture_id)].push_back(p);
+            launch_paths[static_cast<std::size_t>(path.launch_id)].push_back(p);
+        if (path.capture_id >= 0)
+            capture_paths[static_cast<std::size_t>(path.capture_id)].push_back(p);
     }
 
-    std::vector<std::vector<int>> branch_affected_paths(n_br);
-    std::vector<int> path_stamp(static_cast<std::size_t>(d->n_paths), -1);
-    for (int b = 0; b < n_br; b++) {
-        const LpBranch &br = pb->branches[static_cast<std::size_t>(b)];
-        if (br.kind != LpBranchKind::ExistingBuf) continue;
+    std::vector<std::vector<AffectedPath>> branch_affected_paths(n_br);
+    {
+        std::vector<int> path_stamp(static_cast<std::size_t>(d->n_paths), -1);
+        std::vector<int> path_sign(static_cast<std::size_t>(d->n_paths), 0);
+        std::vector<int> touched;
+        for (int b = 0; b < n_br; b++) {
+            const LpBranch &br = pb->branches[static_cast<std::size_t>(b)];
+            if (br.kind != LpBranchKind::ExistingBuf) continue;
 
-        std::vector<int> subtree;
-        collect_subtree_nodes(d, br.child_node, &subtree);
+            std::vector<int> subtree;
+            collect_subtree_nodes(d, br.child_node, &subtree);
 
-        for (int nid : subtree) {
-            if (d->nodes[nid].kind != PD_NODE_FF) continue;
-            for (int p : ff_to_paths[static_cast<std::size_t>(nid)]) {
-                if (path_stamp[static_cast<std::size_t>(p)] != b) {
-                    path_stamp[static_cast<std::size_t>(p)] = b;
-                    branch_affected_paths[b].push_back(p);
+            touched.clear();
+            for (int nid : subtree) {
+                if (d->nodes[nid].kind != PD_NODE_FF) continue;
+                for (int p : launch_paths[static_cast<std::size_t>(nid)]) {
+                    if (path_stamp[static_cast<std::size_t>(p)] != b) {
+                        path_stamp[static_cast<std::size_t>(p)] = b;
+                        path_sign[static_cast<std::size_t>(p)] = 0;
+                        touched.push_back(p);
+                    }
+                    path_sign[static_cast<std::size_t>(p)] -= 1;
                 }
+                for (int p : capture_paths[static_cast<std::size_t>(nid)]) {
+                    if (path_stamp[static_cast<std::size_t>(p)] != b) {
+                        path_stamp[static_cast<std::size_t>(p)] = b;
+                        path_sign[static_cast<std::size_t>(p)] = 0;
+                        touched.push_back(p);
+                    }
+                    path_sign[static_cast<std::size_t>(p)] += 1;
+                }
+            }
+
+            std::vector<AffectedPath> &out = branch_affected_paths[static_cast<std::size_t>(b)];
+            out.reserve(touched.size());
+            for (int p : touched) {
+                const int sign = path_sign[static_cast<std::size_t>(p)];
+                if (sign != 0)
+                    out.push_back({p, sign});
             }
         }
     }
@@ -286,10 +308,41 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
     int passes = 0;
     long long timing_evals = 0;
 
+    std::multiset<double> setup_slacks;
+    std::multiset<double> hold_slacks;
+    double tns_setup_total = 0.0;
+    double tns_hold_total = 0.0;
+    double cur_area_total = 0.0;
+
     while (improved && before_deadline(wall_deadline) &&
            elapsed_sec(t0) < time_limit_sec) {
         improved = false;
         passes++;
+
+        // Resync from the authoritative timing engine once per pass: this bounds any
+        // incremental floating-point drift from the trial/revert cycles below to within a
+        // single pass, and is far cheaper than doing a full rescan per candidate (which is
+        // exactly the cost this rewrite exists to avoid - per-pass cost is O(n_paths), versus
+        // O(n_branches * n_candidates * n_paths) for the old per-candidate rescan).
+        pd_annotate_clock(d);
+        refresh_design_timing(d);
+        setup_slacks.clear();
+        hold_slacks.clear();
+        tns_setup_total = 0.0;
+        tns_hold_total = 0.0;
+        for (int i = 0; i < d->n_paths; i++) {
+            const PdPath &p = d->paths[i];
+            if (p.launch_id < 0 || p.capture_id < 0) continue;
+            setup_slacks.insert(p.slack_setup_ss);
+            if (p.slack_setup_ss < 0.0) tns_setup_total += p.slack_setup_ss;
+            hold_slacks.insert(p.slack_hold_ff);
+            if (p.slack_hold_ff < 0.0) tns_hold_total += p.slack_hold_ff;
+        }
+        cur_area_total = d->total_area;
+        cur_score = lp_compute_score(multiset_min_or_zero(setup_slacks), tns_setup_total,
+                                     multiset_min_or_zero(hold_slacks), tns_hold_total,
+                                     cur_area_total, pb->wns_ss_ori, pb->tns_ss_ori,
+                                     pb->wns_ff_ori, pb->tns_ff_ori, pb->area_ori);
 
         for (int b = 0; b < n_br && before_deadline(wall_deadline); b++) {
             const LpBranch &br = pb->branches[static_cast<std::size_t>(b)];
@@ -302,45 +355,68 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
             const std::vector<int> &cands = branch_candidates[static_cast<std::size_t>(b)];
             if (cands.size() <= 1) continue;
 
+            const std::vector<AffectedPath> &affected =
+                branch_affected_paths[static_cast<std::size_t>(b)];
+            const double orig_area =
+                d->cells[orig_cell_idx].width * d->cells[orig_cell_idx].height;
+
             double best_delta = 0.0;
             int best_cell_idx = orig_cell_idx;
-            double best_score = cur_score;
-
-            // 直接拿出預先算好的受影響路徑名單 (完全消除 HashSet 開銷)
-            const std::vector<int> &affected_paths = branch_affected_paths[b];
 
             for (int ci : cands) {
                 if (ci == orig_cell_idx) continue;
                 if (!before_deadline(wall_deadline)) break;
 
-                apply_cell_to_branch(d, br, ci, &cur_ss, &cur_ff, b);
-                pd_annotate_clock_subtree(d, br.child_node);
-                recompute_timing_for_branch(d, affected_paths);
+                const PdCell *cell = &d->cells[ci];
+                const double delta_ss =
+                    lp_eval_branch_delay_ss(d, cell, br.fanout) - cur_ss[static_cast<std::size_t>(b)];
+                const double delta_ff =
+                    lp_eval_branch_delay_ff(d, cell, br.fanout) - cur_ff[static_cast<std::size_t>(b)];
+                const double new_area = cell->width * cell->height;
+
+                apply_affected_delta(d, affected, delta_ss, delta_ff, &setup_slacks, &hold_slacks,
+                                     &tns_setup_total, &tns_hold_total);
                 timing_evals++;
 
-                const double cand_score = score_design(pb, d);
+                const double cand_area = cur_area_total - orig_area + new_area;
+                const double cand_score = lp_compute_score(
+                    multiset_min_or_zero(setup_slacks), tns_setup_total,
+                    multiset_min_or_zero(hold_slacks), tns_hold_total, cand_area, pb->wns_ss_ori,
+                    pb->tns_ss_ori, pb->wns_ff_ori, pb->tns_ff_ori, pb->area_ori);
                 const double delta = cand_score - cur_score;
                 if (delta > best_delta + 1e-12) {
                     best_delta = delta;
                     best_cell_idx = ci;
-                    best_score = cand_score;
                 }
+
+                // Undo the trial - restores setup_slacks/hold_slacks/tns_*_total exactly, so
+                // the next candidate is evaluated against the same unmodified baseline.
+                apply_affected_delta(d, affected, -delta_ss, -delta_ff, &setup_slacks, &hold_slacks,
+                                     &tns_setup_total, &tns_hold_total);
             }
 
             if (best_delta > 1e-12) {
+                const PdCell *best_cell = &d->cells[best_cell_idx];
+                const double delta_ss = lp_eval_branch_delay_ss(d, best_cell, br.fanout) -
+                                        cur_ss[static_cast<std::size_t>(b)];
+                const double delta_ff = lp_eval_branch_delay_ff(d, best_cell, br.fanout) -
+                                        cur_ff[static_cast<std::size_t>(b)];
+                const double new_area = best_cell->width * best_cell->height;
+
+                apply_affected_delta(d, affected, delta_ss, delta_ff, &setup_slacks, &hold_slacks,
+                                     &tns_setup_total, &tns_hold_total);
+                cur_area_total += new_area - orig_area;
+
                 apply_cell_to_branch(d, br, best_cell_idx, &cur_ss, &cur_ff, b);
                 // 確定要套用了，才花時間拷貝字串
-                std::strncpy(node->cell, d->cells[best_cell_idx].name, PD_MAX_NAME - 1);
+                std::strncpy(node->cell, best_cell->name, PD_MAX_NAME - 1);
                 node->cell[PD_MAX_NAME - 1] = '\0';
-                
-                pd_annotate_clock_subtree(d, br.child_node);
-                recompute_timing_for_branch(d, affected_paths);
-                cur_score = best_score;
+
+                cur_score = lp_compute_score(multiset_min_or_zero(setup_slacks), tns_setup_total,
+                                             multiset_min_or_zero(hold_slacks), tns_hold_total,
+                                             cur_area_total, pb->wns_ss_ori, pb->tns_ss_ori,
+                                             pb->wns_ff_ori, pb->tns_ff_ori, pb->area_ori);
                 improved = true;
-            } else {
-                apply_cell_to_branch(d, br, orig_cell_idx, &cur_ss, &cur_ff, b);
-                pd_annotate_clock_subtree(d, br.child_node);
-                recompute_timing_for_branch(d, affected_paths);
             }
         }
     }
