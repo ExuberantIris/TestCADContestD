@@ -152,8 +152,8 @@ int main(int argc, char **argv)
     // ---------------------------------------------------------
     if (lp_solve_mo_init(&problem, &design, &lp_init, lp_budget, err, sizeof(err)) == 0 &&
         !lp_init.d_ss.empty()) {
-        initial.d_ss = lp_init.d_ss;
-        initial.d_ff = lp_init.d_ff;
+        // NOTE: `initial` must keep holding the true original-design delays (not lp_init's) -
+        // Phase 2 reuses it as a guaranteed-safe second seed for greedy.
         sa_result.lp_init_ok = 1;
         std::printf("LP init: %s (status=%d)\n", lp_init.solver_name.c_str(), lp_init.status);
         {
@@ -237,12 +237,63 @@ int main(int argc, char **argv)
                            &lp_init_metrics, greedy_budget, wall_deadline, err,
                            sizeof(err)) == 0) {
             std::printf("Greedy optimization finished successfully.\n");
-            
-            // 將 Greedy 算出來的結果裝進最終要輸出的結構裡
-            sa_result.solution.d_ss = lp_init.d_ss;
-            sa_result.solution.d_ff = lp_init.d_ff;
+
+            LpMetrics best_metrics{};
+            lp_compute_metrics(&design, &best_metrics);
+            best_metrics.score = lp_compute_score(
+                best_metrics.wns_setup_ss, best_metrics.tns_setup_ss, best_metrics.wns_hold_ff,
+                best_metrics.tns_hold_ff, best_metrics.area, problem.wns_ss_ori, problem.tns_ss_ori,
+                problem.wns_ff_ori, problem.tns_ff_ori, problem.area_ori);
+            LpSolution best_solution = lp_init;
+            const char *best_name = "Greedy_Best_Impr";
+
+            // Greedy's single-buffer hill-climbing is path-dependent: a better LP-init start
+            // does not always reach a better local optimum than starting from the plain
+            // original design (observed empirically on some testcases). If there's
+            // meaningful time left, also try greedy from the untouched original design and
+            // keep whichever final result actually scores higher, so the LP-init replacement
+            // can never make the result worse than the old "no real LP init" behavior.
+            const double remaining_after = remaining_wall_sec(wall_deadline);
+            if (remaining_after > 5.0) {
+                std::printf(
+                    "Running second greedy_post_lp from original-design seed (budget %.1fs)...\n",
+                    remaining_after);
+                LpSolution baseline_seed = initial;
+                LpMetrics baseline_metrics{};
+                baseline_metrics.wns_setup_ss = problem.wns_ss_ori;
+                baseline_metrics.tns_setup_ss = problem.tns_ss_ori;
+                baseline_metrics.wns_hold_ff = problem.wns_ff_ori;
+                baseline_metrics.tns_hold_ff = problem.tns_ff_ori;
+                baseline_metrics.area = problem.area_ori;
+                baseline_metrics.score = 0.0;
+
+                if (greedy_post_lp(argv[2], testcase_dir, &problem, &design, &dp_ss, &dp_ff,
+                                   &baseline_seed, &baseline_metrics, remaining_after,
+                                   wall_deadline, err, sizeof(err)) == 0) {
+                    LpMetrics second_metrics{};
+                    lp_compute_metrics(&design, &second_metrics);
+                    second_metrics.score = lp_compute_score(
+                        second_metrics.wns_setup_ss, second_metrics.tns_setup_ss,
+                        second_metrics.wns_hold_ff, second_metrics.tns_hold_ff, second_metrics.area,
+                        problem.wns_ss_ori, problem.tns_ss_ori, problem.wns_ff_ori,
+                        problem.tns_ff_ori, problem.area_ori);
+                    std::printf("Second greedy result score=%.6f (first was %.6f)\n",
+                                second_metrics.score, best_metrics.score);
+                    if (second_metrics.score > best_metrics.score) {
+                        best_metrics = second_metrics;
+                        best_solution = baseline_seed;
+                        best_name = "Greedy_Best_Impr_OrigSeed";
+                    }
+                } else {
+                    std::fprintf(stderr, "Second greedy post-LP failed: %s\n", err);
+                }
+            }
+
+            // 將較佳的 Greedy 結果裝進最終要輸出的結構裡
+            sa_result.solution.d_ss = best_solution.d_ss;
+            sa_result.solution.d_ff = best_solution.d_ff;
             sa_result.solution.status = 1;
-            sa_result.solution.solver_name = "Greedy_Best_Impr";
+            sa_result.solution.solver_name = best_name;
         } else if (greedy_budget <= 0.1) {
             std::printf("Greedy skipped: no wall time remaining\n");
             sa_result.solution = lp_init;

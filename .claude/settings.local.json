@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gcc --version)",
+      "Bash(g++ --version)",
+      "Read(//c/MinGW/bin//**)",
+      "Bash(g++ -std=c++17 -fsyntax-only -Iinclude src/main.cpp)",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make clean >/dev/null 2>&1; make build 2>&1 | tail -30\")",
+      "Bash(wsl.exe -e bash -lc \"dpkg -l | grep -i glpk; ldconfig -p | grep -i glpk; pkg-config --list-all 2>/dev/null | grep -i glpk; which glpsol\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && g++ -std=c++17 -Wall -Wextra -O2 -Iinclude -c -o src/lp_mo_init.o src/lp_mo_init.cpp 2>&1\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make build 2>&1 | tail -20\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && mkdir -p /tmp/lp_test/testcase2 && time ./sa_solver testcase/testcase2 /tmp/lp_test/testcase2 2>&1 | tail -60\")",
+      "Read(//tmp/lp_test/testcase2/**)",
+      "Bash(wsl.exe -e bash -lc \"cat /tmp/lp_test/testcase2/result.txt\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make build 2>&1 | tail -30\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make run-all 2>&1 | tee /tmp/run_all_new.log\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && cat result/testcase4/result.txt\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && grep -A3 'lp_solve_mo_init\\\\|wall_elapsed\\\\|greedy_post_lp: finished' /tmp/run_all_new.log | head -60\")",
+      "Bash(wsl.exe -e bash -lc 'cd '\\\\''/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD'\\\\'' && for tc in testcase0 testcase1 testcase3; do echo \"=== $tc ===\"; cat result/$tc/result.txt; echo; done')",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make clean >/dev/null 2>&1 && make build 2>&1 | tail -40\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make run-all 2>&1 | tee /tmp/run_all_v2.log\")",
+      "Bash(wsl.exe -e bash -lc \"tail -30 /tmp/run_all_v2.log 2>/dev/null\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && cat result_summary.csv\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && cat result/testcase4/result.txt && echo '---LOG---' && grep -A8 'Running testcase4' /tmp/run_all_v2.log\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && awk '/Running testcase4/,/Running testcase[^4]|report/' /tmp/run_all_v2.log | grep -n 'second\\\\|Second\\\\|Greedy optimization\\\\|greedy_post_lp: finished\\\\|wall remaining\\\\|lp_solve_mo_init'\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && awk '/Running testcase4/,/Running testcase[^4]|^==> 所有測資/' /tmp/run_all_v2.log\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && gcc -std=c11 -Wall -Wextra -O2 -Iinclude -c -o src/pd_parser.lp.o src/pd_parser.c 2>&1\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make build 2>&1 | tail -15\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && mkdir -p /tmp/quick4 && time SA_TIME_LIMIT=40 GREEDY_TIME_LIMIT=10 ./sa_solver testcase/testcase4 /tmp/quick4 2>&1 | head -20\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && g++ -std=c++17 -Wall -Wextra -O2 -Iinclude -c -o src/greedy_postlp.o src/greedy_postlp.cpp 2>&1\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make build 2>&1 | tail -5 && mkdir -p /tmp/quick4b && time SA_TIME_LIMIT=60 GREEDY_TIME_LIMIT=20 ./sa_solver testcase/testcase4 /tmp/quick4b 2>&1 | head -20\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make run-all 2>&1 | tee /tmp/run_all_v3.log\")",
+      "Bash(wsl.exe -e bash -lc 'cd '\\\\''/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD'\\\\'' && for tc in testcase0 testcase4; do echo \"=== $tc ===\"; cat result/$tc/result.txt; echo; done')",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && grep -n 'Running testcase\\\\|second greedy_post_lp\\\\|Second greedy result' /tmp/run_all_v3.log\")",
+      "Bash(wsl.exe -e bash -lc 'cd '\\\\''/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD'\\\\'' && for tc in testcase0 testcase1 testcase2 testcase3 testcase4; do w=$\\(grep wall_elapsed_sec result/$tc/result.txt\\); echo \"$tc: $w\"; done')"
+    ]
+  }
+}

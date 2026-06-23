@@ -14,6 +14,76 @@ static int fail(char *err, size_t err_sz, const char *msg)
     return -1;
 }
 
+/* Small open-addressing string->int hash map, used only to speed up the name/path lookups
+ * during parsing. Without it, resolving each path's launch/capture node is an O(n_nodes) scan
+ * (O(n_paths*n_nodes) total) and matching FF_delay.rpt rows back to SS_delay.rpt paths is an
+ * O(n_paths) scan per row (O(n_paths^2) total) - on the largest testcases (tens of thousands
+ * of nodes, over 100k paths) that alone can burn minutes of the 10-minute run budget before
+ * any optimization even starts. */
+typedef struct {
+    char key[2 * PD_MAX_NAME];
+    int value;
+    int used;
+} PdHashSlot;
+
+typedef struct {
+    PdHashSlot *slots;
+    unsigned int cap; /* power of 2 */
+} PdHashMap;
+
+static unsigned long pd_hash_str(const char *s)
+{
+    unsigned long h = 5381;
+    while (*s)
+        h = h * 33u + (unsigned char)(*s++);
+    return h;
+}
+
+static int pd_hashmap_init(PdHashMap *m, int min_entries)
+{
+    unsigned int cap = 16;
+    while (cap < (unsigned int)(min_entries < 1 ? 1 : min_entries) * 2u)
+        cap *= 2;
+    m->slots = calloc(cap, sizeof(PdHashSlot));
+    if (!m->slots)
+        return -1;
+    m->cap = cap;
+    return 0;
+}
+
+static void pd_hashmap_free(PdHashMap *m)
+{
+    free(m->slots);
+    m->slots = NULL;
+    m->cap = 0;
+}
+
+static void pd_hashmap_put(PdHashMap *m, const char *key, int value)
+{
+    unsigned long h = pd_hash_str(key) & (m->cap - 1);
+    while (m->slots[h].used) {
+        if (strcmp(m->slots[h].key, key) == 0) {
+            m->slots[h].value = value;
+            return;
+        }
+        h = (h + 1) & (m->cap - 1);
+    }
+    strncpy(m->slots[h].key, key, sizeof(m->slots[h].key) - 1);
+    m->slots[h].value = value;
+    m->slots[h].used = 1;
+}
+
+static int pd_hashmap_get(const PdHashMap *m, const char *key)
+{
+    unsigned long h = pd_hash_str(key) & (m->cap - 1);
+    while (m->slots[h].used) {
+        if (strcmp(m->slots[h].key, key) == 0)
+            return m->slots[h].value;
+        h = (h + 1) & (m->cap - 1);
+    }
+    return -1;
+}
+
 static int ensure_nodes(PdDesign *d, char *err, size_t err_sz)
 {
     if (d->n_nodes < d->cap_nodes)
@@ -292,7 +362,8 @@ bad:
     return fail(err, err_sz, "invalid clk_tree.structure");
 }
 
-static int parse_delay_rpt(const char *path, int is_ss, PdDesign *d, char *err, size_t err_sz)
+static int parse_delay_rpt(const char *path, int is_ss, PdDesign *d, const PdHashMap *node_map,
+                           const PdHashMap *path_map, char *err, size_t err_sz)
 {
     FILE *fp = fopen(path, "r");
     char line[PD_MAX_LINE];
@@ -330,8 +401,6 @@ static int parse_delay_rpt(const char *path, int is_ss, PdDesign *d, char *err, 
                 continue;
         }
         {
-            int li, ci;
-
             if (is_ss) {
                 if (ensure_paths(d, err, err_sz) != 0)
                     goto bad;
@@ -340,24 +409,21 @@ static int parse_delay_rpt(const char *path, int is_ss, PdDesign *d, char *err, 
                 strncpy(path_row->launch, launch, PD_MAX_NAME - 1);
                 strncpy(path_row->capture, capture, PD_MAX_NAME - 1);
                 path_row->data_ss = delay;
-                path_row->launch_id = pd_find_node_by_name(d, launch);
-                path_row->capture_id = pd_find_node_by_name(d, capture);
+                path_row->launch_id = pd_hashmap_get(node_map, launch);
+                path_row->capture_id = pd_hashmap_get(node_map, capture);
                 d->n_paths++;
             } else {
-                li = -1;
-                for (ci = 0; ci < d->n_paths; ci++) {
-                    if (pd_streq(d->paths[ci].launch, launch) &&
-                        pd_streq(d->paths[ci].capture, capture)) {
-                        d->paths[ci].data_ff = delay;
-                        li = ci;
-                        break;
-                    }
-                }
-                if (li < 0) {
+                char composite[2 * PD_MAX_NAME];
+                int idx;
+
+                snprintf(composite, sizeof(composite), "%s\x01%s", launch, capture);
+                idx = pd_hashmap_get(path_map, composite);
+                if (idx < 0) {
                     fclose(fp);
                     snprintf(err, err_sz, "FF path not in SS report: %s -> %s", launch, capture);
                     return -1;
                 }
+                d->paths[idx].data_ff = delay;
             }
         }
     }
@@ -372,6 +438,9 @@ bad:
 int pd_load_design(const char *testcase_dir, PdDesign *d, char *err, size_t err_sz)
 {
     char path[1024];
+    PdHashMap node_map = {0};
+    PdHashMap path_map = {0};
+    int i, rc;
 
     pd_free_design(d);
 
@@ -385,14 +454,35 @@ int pd_load_design(const char *testcase_dir, PdDesign *d, char *err, size_t err_
     if (parse_structure(path, d, err, err_sz) != 0)
         return -1;
 
-    if (pd_join_path(path, sizeof(path), testcase_dir, "SS_delay.rpt") != 0)
+    if (pd_hashmap_init(&node_map, d->n_nodes) != 0)
+        return fail(err, err_sz, "out of memory (node map)");
+    for (i = 0; i < d->n_nodes; i++)
+        pd_hashmap_put(&node_map, d->nodes[i].name, i);
+
+    if (pd_join_path(path, sizeof(path), testcase_dir, "SS_delay.rpt") != 0) {
+        pd_hashmap_free(&node_map);
         return fail(err, err_sz, "path too long");
-    if (parse_delay_rpt(path, 1, d, err, err_sz) != 0)
+    }
+    rc = parse_delay_rpt(path, 1, d, &node_map, NULL, err, err_sz);
+    pd_hashmap_free(&node_map);
+    if (rc != 0)
         return -1;
 
-    if (pd_join_path(path, sizeof(path), testcase_dir, "FF_delay.rpt") != 0)
+    if (pd_hashmap_init(&path_map, d->n_paths) != 0)
+        return fail(err, err_sz, "out of memory (path map)");
+    for (i = 0; i < d->n_paths; i++) {
+        char composite[2 * PD_MAX_NAME];
+        snprintf(composite, sizeof(composite), "%s\x01%s", d->paths[i].launch, d->paths[i].capture);
+        pd_hashmap_put(&path_map, composite, i);
+    }
+
+    if (pd_join_path(path, sizeof(path), testcase_dir, "FF_delay.rpt") != 0) {
+        pd_hashmap_free(&path_map);
         return fail(err, err_sz, "path too long");
-    if (parse_delay_rpt(path, 0, d, err, err_sz) != 0)
+    }
+    rc = parse_delay_rpt(path, 0, d, NULL, &path_map, err, err_sz);
+    pd_hashmap_free(&path_map);
+    if (rc != 0)
         return -1;
 
     d->t_setup = PD_SETUP_RATIO * d->clock_period;

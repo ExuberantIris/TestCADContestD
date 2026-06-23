@@ -248,7 +248,21 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
     build_branch_candidates(d, pb, &branch_candidates);
 
     // 🚀 優化一：在迴圈外預先算好「每個 Branch 會影響到哪幾條 Path」
+    // Reverse index FF node -> paths touching it as launch/capture, built once in O(n_paths).
+    // Without it, this loop allocated an O(n_nodes) bitmap and rescanned all n_paths paths for
+    // *every* branch (O(n_branches*(n_nodes+n_paths))), which dwarfs everything else on large
+    // testcases (tens of thousands of branches x hundreds of thousands of paths).
+    std::vector<std::vector<int>> ff_to_paths(d->n_nodes);
+    for (int p = 0; p < d->n_paths; p++) {
+        const PdPath &path = d->paths[p];
+        if (path.launch_id >= 0)
+            ff_to_paths[static_cast<std::size_t>(path.launch_id)].push_back(p);
+        if (path.capture_id >= 0 && path.capture_id != path.launch_id)
+            ff_to_paths[static_cast<std::size_t>(path.capture_id)].push_back(p);
+    }
+
     std::vector<std::vector<int>> branch_affected_paths(n_br);
+    std::vector<int> path_stamp(static_cast<std::size_t>(d->n_paths), -1);
     for (int b = 0; b < n_br; b++) {
         const LpBranch &br = pb->branches[static_cast<std::size_t>(b)];
         if (br.kind != LpBranchKind::ExistingBuf) continue;
@@ -256,16 +270,13 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
         std::vector<int> subtree;
         collect_subtree_nodes(d, br.child_node, &subtree);
 
-        std::vector<bool> is_ff_affected(d->n_nodes, false);
         for (int nid : subtree) {
-            if (d->nodes[nid].kind == PD_NODE_FF) is_ff_affected[nid] = true;
-        }
-
-        for (int p = 0; p < d->n_paths; p++) {
-            const PdPath &path = d->paths[p];
-            if ((path.launch_id >= 0 && is_ff_affected[path.launch_id]) ||
-                (path.capture_id >= 0 && is_ff_affected[path.capture_id])) {
-                branch_affected_paths[b].push_back(p);
+            if (d->nodes[nid].kind != PD_NODE_FF) continue;
+            for (int p : ff_to_paths[static_cast<std::size_t>(nid)]) {
+                if (path_stamp[static_cast<std::size_t>(p)] != b) {
+                    path_stamp[static_cast<std::size_t>(p)] = b;
+                    branch_affected_paths[b].push_back(p);
+                }
             }
         }
     }

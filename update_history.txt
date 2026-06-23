@@ -1,0 +1,16 @@
+********** 0624 05:41 **********
+What changed (4 files):
+src/lp_mo_init.cpp — replaced the ad-hoc momentum/gradient heuristic with an exact algorithm: setup(SS) and hold(FF) decompose into independent problems (disjoint variables), each solved by bisecting the achievable WNS threshold and checking feasibility via SPFA negative-cycle detection on the tree's difference-constraint graph. Solved in coordinates relative to the original design so it only touches branches a real constraint forces it to move — not an arbitrary lazy/extremal point.
+src/main.cpp — added a safety net: since greedy's single-buffer hill-climbing is path-dependent, a better LP-init start doesn't always reach a better local optimum. When time allows, it now also tries greedy from the plain original design and keeps whichever final result actually scores higher. This is what guaranteed testcase1 never regressed below the old baseline.
+src/pd_parser.c — found and fixed a pre-existing O(n²) bug: node-name and FF-path lookups during file parsing were linear scans, costing ~10¹⁰ operations on the large testcases (150–220+ seconds wasted before optimization even started). Replaced with a hash map.
+src/greedy_postlp.cpp — found and fixed a second pre-existing bug: the per-branch "affected paths" precomputation allocated an O(n_nodes) bitmap and rescanned all paths for every branch. Replaced with a precomputed reverse index.
+
+All within the 600-second limit. Final tally:
+
+Testcase	Baseline	New	Δ
+0	0.972056	0.990492	+0.018
+1	1.036434	1.036434	0 (safety net kept old result — LP-seed would've been worse)
+2	1.150009	1.180294	+0.030
+3	0.932437	0.959930	+0.028
+4	0.962959	1.090397	+0.127
+Total	5.053895	5.257547	+0.204 (+4.0%)
