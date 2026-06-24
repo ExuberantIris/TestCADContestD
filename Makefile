@@ -27,7 +27,8 @@ SA_SRCS = src/main.cpp \
           src/lp_mo_init.cpp \
           src/sa_eval.cpp \
           src/sa_apply.cpp \
-          src/greedy_postlp.cpp
+          src/greedy_postlp.cpp \
+          src/insert_select.cpp
 
 PD_OBJS = $(PD_SRCS:.c=.lp.o)
 SA_OBJS = $(SA_SRCS:.cpp=.o)

@@ -1,3 +1,4 @@
+#include "insert_select.hpp"
 #include "lp_buffer_dp.hpp"
 #include "lp_mo_init.hpp"
 #include "lp_score.hpp"
@@ -113,11 +114,29 @@ int main(int argc, char **argv)
     }
 
     // Independent load (not a mutated copy of `design`) - this is the reference the final
-    // legality gate compares against, and the safe fallback output if that gate ever fails.
+    // legality gate compares against, the source of the *true* baseline ("_ori") metrics the
+    // score is computed against, and the safe fallback output if the legality gate ever fails.
     if (pd_load_design(testcase_dir, &orig_design, err, sizeof(err)) != 0) {
         std::fprintf(stderr, "Load failed (orig copy): %s\n", err);
         pd_free_design(&design);
         return 1;
+    }
+
+    // Pre-insert dedicated buffers on shared-buffer edges that touch a baseline timing
+    // violation, *before* lp_build_from_design runs - this is what lets the entire downstream
+    // pipeline (LP-init bisection, incremental greedy, order-randomization, dual-seed safety
+    // net) treat the new buffers as perfectly ordinary existing buffers with zero further
+    // changes: lp_build_from_design classifies an edge as "Insertable" purely because no
+    // buffer sits there yet, so once inserted it's just another ExistingBuf branch.
+    pd_annotate_clock(&design);
+    pd_compute_timing(&design);
+    {
+        const int n_inserted = insert_decoupling_buffers(&design, err, sizeof(err));
+        if (n_inserted < 0)
+            std::fprintf(stderr, "insert_decoupling_buffers failed: %s\n", err);
+        else if (n_inserted > 0)
+            std::printf("Pre-inserted %d decoupling buffer(s) on shared-violation edges\n",
+                        n_inserted);
     }
 
     if (lp_build_from_design(&problem, &design, err, sizeof(err)) != 0) {
@@ -143,7 +162,17 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    lp_compute_metrics(&design, &ori);
+    // lp_build_from_design captured problem.*_ori from `design`'s *current* timing, which by
+    // this point may already reflect the pre-inserted decoupling buffers - not the true
+    // original baseline the contest scores against. Overwrite with the real thing, computed
+    // from the untouched orig_design, before anything downstream reads these values.
+    pd_annotate_clock(&orig_design);
+    lp_compute_metrics(&orig_design, &ori);
+    problem.wns_ss_ori = ori.wns_setup_ss;
+    problem.tns_ss_ori = ori.tns_setup_ss;
+    problem.wns_ff_ori = ori.wns_hold_ff;
+    problem.tns_ff_ori = ori.tns_hold_ff;
+    problem.area_ori = ori.area;
     ori.score = lp_compute_score(ori.wns_setup_ss, ori.tns_setup_ss, ori.wns_hold_ff, ori.tns_hold_ff,
                                  ori.area, problem.wns_ss_ori, problem.tns_ss_ori, problem.wns_ff_ori,
                                  problem.tns_ff_ori, problem.area_ori);

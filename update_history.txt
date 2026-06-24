@@ -1,3 +1,15 @@
+********** 0624 22:00 **********
+Option 1: Ghost Buffers (Pre-allocation): scan the baseline (pre-optimization) violating setup paths, and for each one's launch/capture FF, check whether its direct parent (d->nodes[ff_id].parent) has nchildren > 1 
+Testcase	Without insertion	With insertion	Δ	Buffers inserted
+0	1.002265	1.021074	+0.019	18,683
+1	1.041669	0.955699	−0.086	4,339
+2	1.191295	1.228562	+0.037	2,269
+3	0.971389	0.948907	−0.023	7,184
+4	1.140082	1.109781	−0.030	29,626
+No legality failures, no timeouts (max 596.2s) — the regressions are a real search/scoring-tradeoff problem, not a bug. Looking at testcase1's detail explains why: WNS went from -0.297→-0.302 (slightly worse) and TNS improved nicely (-59.3→-46.0), but area nearly doubled (1063→1923) — it actually exceeded testcase1's original baseline area, making the area term in the score formula go negative.
+
+Root cause: selection criterion ("any FF on a baseline-violating path sharing a buffer") is too loose. I inserted on thousands of edges per testcase, and since there's no "remove an unhelpful insertion" operation, every one of them permanently pays at least the smallest cell's area cost — even if the optimizer decides it isn't actually needed. With α=0.6 on timing but only γ=0.2 on area, that tax adds up faster than the timing gain in several cases.
+
 ********** 0624 20:48 **********
 Implemented pd_insert_buffer_on_child() (src/pd_mutate.c / include/pd_mutate.h) 
 — inserts a new buffer between a parent and exactly one of its children, leaving every other child (sibling) completely untouched. 
