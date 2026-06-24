@@ -475,10 +475,6 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
         resync();
     };
 
-    // Snapshot of the LP-init-synced (or baseline-reverted) starting point, before any
-    // convergence attempt - every shuffled-order attempt below restarts from exactly here.
-    const Snapshot start = take_snapshot();
-
     std::vector<int> order(static_cast<std::size_t>(n_br));
     for (int i = 0; i < n_br; i++)
         order[static_cast<std::size_t>(i)] = i;
@@ -492,31 +488,55 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
     int attempts = 1;
     int accepted_attempts = 0;
 
-    // --- Shuffled-order attempts -------------------------------------------------------------
-    // Coordinate-descent hill-climbing gets stuck at whatever local optimum the branch
-    // processing order leads to - the fixed tree order is just one arbitrary trajectory among
-    // many. Spend up to half of whatever time remains after the first attempt re-running
-    // convergence from the same starting point with a freshly shuffled order each time, keeping
-    // the best final result; the other half is deliberately left unused so main.cpp's dual-seed
-    // safety net (trying the plain original design as an alternate starting point) still gets a
-    // chance to run afterward. A patience limit avoids burning the whole budget on attempts that
-    // keep finding nothing (e.g. a tiny already-optimal design).
+    // --- Iterated local search: perturb + shuffle ---------------------------------------------
+    // Coordinate-descent hill-climbing gets stuck at whatever local optimum the current state
+    // and branch processing order lead to. Combine two escape mechanisms in one loop: kick a
+    // random handful of branches to a random candidate (explores a neighboring state the
+    // current order would never reach on its own) and shuffle the visitation order before
+    // reconverging (explores a different trajectory even from the same state). Each round
+    // restarts from the *best* solution found so far - not the original LP-init baseline - so
+    // progress compounds instead of repeatedly re-discovering the same first attempt. Spend up
+    // to half of whatever time remains after the first attempt; the other half is deliberately
+    // left unused so main.cpp's dual-seed safety net (trying the plain original design as an
+    // alternate starting point) still gets a chance to run afterward. A patience limit avoids
+    // burning the whole budget on rounds that keep finding nothing (e.g. a tiny already-optimal
+    // design).
     const double remain_call_budget = time_limit_sec - elapsed_sec(t0);
     const double remain_wall = std::chrono::duration<double>(wall_deadline - Clock::now()).count();
-    const double shuffle_budget = 0.5 * std::max(0.0, std::min(remain_call_budget, remain_wall));
-    const Clock::time_point shuffle_deadline =
-        Clock::now() + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(shuffle_budget));
+    const double ils_budget = 0.5 * std::max(0.0, std::min(remain_call_budget, remain_wall));
+    const Clock::time_point ils_deadline =
+        Clock::now() + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(ils_budget));
+
+    std::vector<int> perturbable;
+    for (int b = 0; b < n_br; b++) {
+        const LpBranch &br = pb->branches[static_cast<std::size_t>(b)];
+        if (br.kind == LpBranchKind::ExistingBuf && branch_candidates[static_cast<std::size_t>(b)].size() > 1)
+            perturbable.push_back(b);
+    }
 
     constexpr int kPatience = 50;
-    if (n_br > 1 && shuffle_budget > 0.5) {
+    if (!perturbable.empty() && ils_budget > 0.5) {
         std::mt19937 rng(0xC0FFEEu);
+        std::uniform_int_distribution<std::size_t> pick_branch(0, perturbable.size() - 1);
+        const int kmax = std::max(1, std::min(20, static_cast<int>(perturbable.size() / 20) + 1));
+        std::uniform_int_distribution<int> pick_kicks(1, kmax);
+
         int attempts_since_improvement = 0;
-        while (before_deadline(wall_deadline) && Clock::now() < shuffle_deadline &&
+        while (before_deadline(wall_deadline) && Clock::now() < ils_deadline &&
                attempts_since_improvement < kPatience) {
             attempts++;
-            restore_snapshot(start);
+            restore_snapshot(best);
+
+            const int kicks = pick_kicks(rng);
+            for (int k = 0; k < kicks; k++) {
+                const int b = perturbable[pick_branch(rng)];
+                const std::vector<int> &cands = branch_candidates[static_cast<std::size_t>(b)];
+                std::uniform_int_distribution<std::size_t> pick_cell(0, cands.size() - 1);
+                commit_branch(b, cands[pick_cell(rng)]);
+            }
             std::shuffle(order.begin(), order.end(), rng);
-            converge(order, shuffle_deadline);
+
+            converge(order, ils_deadline);
 
             if (cur_score > best.score + 1e-9) {
                 best = take_snapshot();
@@ -534,7 +554,7 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
     cur_score = score_design(pb, d);
 
     std::printf(
-        "greedy_post_lp: finished after %d passes (%d order attempts, %d improved), %lld timing evals, %.1fs\n",
+        "greedy_post_lp: finished after %d passes (%d ILS rounds, %d improved), %lld timing evals, %.1fs\n",
         passes, attempts, accepted_attempts, timing_evals, elapsed_sec(t0));
 
     lp_init->d_ss = cur_ss;

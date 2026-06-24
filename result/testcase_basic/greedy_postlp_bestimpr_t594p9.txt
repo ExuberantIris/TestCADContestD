@@ -2,8 +2,8 @@ greedy_postlp result
 testcase_dir: testcase/testcase_basic
 time_limit_sec: 594.9
 lp_init_ok: 1
-greedy_elapsed_sec: 0.002
-timing_evals: 16
+greedy_elapsed_sec: 0.009
+timing_evals: 672
 solver: greedy_post_lp
 
 === baseline (ori) ===

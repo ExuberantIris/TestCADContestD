@@ -2,13 +2,13 @@ sa_solver_prime result
 testcase_dir: testcase/testcase1
 time_limit_sec: 600.0
 sa_phase_limit_sec: 555.0
-lp_init_sec: 0.907
+lp_init_sec: 0.808
 lp_init_ok: 1
-wall_elapsed_sec: 456.917
-sa_elapsed_sec: 456.310
+wall_elapsed_sec: 458.013
+sa_elapsed_sec: 457.436
 sa_iterations: 0
 use_second_best: 0
-solver: Greedy_Best_Impr
+solver: Greedy_Best_Impr_OrigSeed
 solver_status: 1
 
 === baseline (ori) ===
@@ -24,7 +24,7 @@ Total area   : 1600.098248
 Score (a=0.6, b=0.2, g=0.2): 0.159102
 
 === after optimize ===
-SS setup WNS : -0.297000  TNS : -59.335500
-FF hold  WNS : -0.015100  TNS : -0.015200
-Total area   : 1063.410448
-Score (a=0.6, b=0.2, g=0.2): 1.041669
+SS setup WNS : -0.297000  TNS : -59.500600
+FF hold  WNS : -0.015100  TNS : -0.015100
+Total area   : 1050.291848
+Score (a=0.6, b=0.2, g=0.2): 1.042912

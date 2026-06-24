@@ -1,3 +1,18 @@
+********** 0624 12:58 **********
+Combined ILS results — mixed verdict
+Testcase	Order-only	Combined ILS	Δ
+0	1.002265	1.001508	−0.0008 (noise — 1 ILS round, never ran)
+1	1.041669	1.042912	+0.0012
+2	1.191295	1.194178	+0.0029
+3	0.971389	0.962180	−0.0092
+4	1.140082	1.137787	−0.0023 (noise — 1 ILS round, never ran)
+Total	5.346700	5.338565	−0.0081
+Combined ILS is not a clear win — it's actually narrowly behind order-only-randomization on the total, despite much higher per-round acceptance rates (e.g. testcase2: 43 rounds/22 improved, testcase3: 99 rounds/38 improved — both far higher hit rates than order-only ever showed).
+
+The likely explanation: "always perturb from the current best" (classic ILS) explores tightly around one neighborhood, while "always restart from the original baseline + reshuffle" (multi-start) explores more globally diverse trajectories each time. For testcase3, that global diversity apparently found a better local optimum than refining around best ever did — high acceptance rate isn't the same as finding the best reachable optimum. testcase0/4 differences are noise (only 1 ILS round ran for either — no time — same inherent variance as before).
+
+So: order-only-randomization is currently the best performer of the three variants tried.
+
 ********** 0624 11:48 **********
 Summary: branch-order randomization results
 Testcase	Bug-fixes only	Perturb/restart (reverted)	Order randomization (new)	Δ vs best-of-prior
