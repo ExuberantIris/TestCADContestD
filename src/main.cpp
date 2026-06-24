@@ -122,23 +122,6 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // Pre-insert dedicated buffers on shared-buffer edges that touch a baseline timing
-    // violation, *before* lp_build_from_design runs - this is what lets the entire downstream
-    // pipeline (LP-init bisection, incremental greedy, order-randomization, dual-seed safety
-    // net) treat the new buffers as perfectly ordinary existing buffers with zero further
-    // changes: lp_build_from_design classifies an edge as "Insertable" purely because no
-    // buffer sits there yet, so once inserted it's just another ExistingBuf branch.
-    pd_annotate_clock(&design);
-    pd_compute_timing(&design);
-    {
-        const int n_inserted = insert_decoupling_buffers(&design, err, sizeof(err));
-        if (n_inserted < 0)
-            std::fprintf(stderr, "insert_decoupling_buffers failed: %s\n", err);
-        else if (n_inserted > 0)
-            std::printf("Pre-inserted %d decoupling buffer(s) on shared-violation edges\n",
-                        n_inserted);
-    }
-
     if (lp_build_from_design(&problem, &design, err, sizeof(err)) != 0) {
         std::fprintf(stderr, "Problem build failed: %s\n", err);
         pd_free_design(&design);
@@ -160,6 +143,71 @@ int main(int argc, char **argv)
         pd_free_design(&design);
         pd_free_design(&orig_design);
         return 1;
+    }
+
+    // ---------------------------------------------------------
+    // Phase 0: targeted buffer insertion
+    // ---------------------------------------------------------
+    // Decide where inserting a dedicated buffer can help by first solving the *resize-only*
+    // exact relaxation (cheap - typically a few seconds even on the largest testcases) and
+    // looking at which paths are *still* violating under that provably-optimal resize
+    // solution. That is a far more precise signal than raw baseline violations: many baseline
+    // violations get fully resolved by resize alone, and inserting there anyway would just be
+    // a permanent, unrecoverable area tax (there is no "remove an unhelpful insertion" path).
+    {
+        const double pass1_budget =
+            std::min(lp_init_limit, std::max(0.0, remaining_wall_sec(wall_deadline)));
+        LpSolution lp_pass1;
+        if (pass1_budget > 0.1 &&
+            lp_solve_mo_init(&problem, &design, &lp_pass1, pass1_budget, err, sizeof(err)) == 0 &&
+            !lp_pass1.d_ss.empty()) {
+            SaPgCtx pass1_ctx;
+            if (sa_build_ctx(&problem, &design, &pass1_ctx)) {
+                sa_eval_state(&problem, &design, lp_pass1.d_ss, lp_pass1.d_ff, &dp_ss, &dp_ff,
+                             &pass1_ctx);
+                // pb->path_ids is the identity map 0..n_paths-1 (see lp_build_from_design), so
+                // ctx path index p corresponds directly to design.paths[p].
+                const std::size_t n_eval =
+                    std::min(pass1_ctx.slack_ss.size(), static_cast<std::size_t>(design.n_paths));
+                for (std::size_t p = 0; p < n_eval; p++) {
+                    design.paths[p].slack_setup_ss = pass1_ctx.slack_ss[p];
+                    design.paths[p].slack_hold_ff = pass1_ctx.slack_ff[p];
+                }
+
+                const int n_inserted = insert_decoupling_buffers(&design, err, sizeof(err));
+                if (n_inserted < 0) {
+                    std::fprintf(stderr, "insert_decoupling_buffers failed: %s\n", err);
+                } else if (n_inserted > 0) {
+                    std::printf(
+                        "Pre-inserted %d decoupling buffer(s) on resize-only-residual edges "
+                        "(resize-only WNS_ss=%.6f WNS_ff=%.6f)\n",
+                        n_inserted, pass1_ctx.wns_ss, pass1_ctx.wns_ff);
+
+                    // Topology changed - rebuild everything that depends on it.
+                    if (lp_build_from_design(&problem, &design, err, sizeof(err)) != 0) {
+                        std::fprintf(stderr, "Problem rebuild after insertion failed: %s\n", err);
+                        pd_free_design(&design);
+                        pd_free_design(&orig_design);
+                        return 1;
+                    }
+                    dp_max_delay = 0.0;
+                    for (const LpBranch &br : problem.branches) {
+                        dp_max_delay = std::max(dp_max_delay, br.d_ss_max);
+                        dp_max_delay = std::max(dp_max_delay, br.d_ff_max);
+                    }
+                    dp_max_delay = std::min(LpBufferChainDp::kMaxDelay, dp_max_delay + 0.02);
+                    if (dp_ss.build(&design, LpBufferDpCorner::SS, dp_max_delay) != 0 ||
+                        dp_ff.build(&design, LpBufferDpCorner::FF, dp_max_delay) != 0) {
+                        std::fprintf(stderr, "DP table rebuild after insertion failed\n");
+                        pd_free_design(&design);
+                        pd_free_design(&orig_design);
+                        return 1;
+                    }
+                }
+            }
+        } else {
+            std::printf("Insertion candidate pass skipped/failed; proceeding resize-only\n");
+        }
     }
 
     // lp_build_from_design captured problem.*_ori from `design`'s *current* timing, which by
@@ -186,11 +234,16 @@ int main(int argc, char **argv)
     sa_init_from_design(&problem, &design, opts, &initial.d_ss, &initial.d_ff);
 
     const auto lp_t0 = std::chrono::steady_clock::now();
-    
+
     // ---------------------------------------------------------
     // Phase 1: LP Init
     // ---------------------------------------------------------
-    if (lp_solve_mo_init(&problem, &design, &lp_init, lp_budget, err, sizeof(err)) == 0 &&
+    // Recomputed fresh (not the `lp_budget` from program start) - Phase 0's resize-only pass
+    // and any insertion/rebuild it triggered may have already used up meaningful wall time,
+    // and lp_solve_mo_init only knows about the budget it's given, not the global deadline.
+    const double final_lp_budget =
+        std::min(lp_init_limit, std::max(0.0, remaining_wall_sec(wall_deadline)));
+    if (lp_solve_mo_init(&problem, &design, &lp_init, final_lp_budget, err, sizeof(err)) == 0 &&
         !lp_init.d_ss.empty()) {
         // NOTE: `initial` must keep holding the true original-design delays (not lp_init's) -
         // Phase 2 reuses it as a guaranteed-safe second seed for greedy.

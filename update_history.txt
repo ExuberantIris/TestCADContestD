@@ -1,3 +1,18 @@
+********** 0625 00:03 **********
+LP-init (resize-only, no insertion) → find residual violations → select insertion candidates from those → apply insertions → rebuild LpProblem → LP-init again (now with the new buffers as ordinary ExistingBuf branches) → Greedy
+Refined selection helped, but didn't fix the core problem
+Testcase	No insertion	Naive insertion	Refined insertion	Insertion count (naive→refined)
+0	1.002265	1.021074	1.021982	18,683 → 18,597
+1	1.041669	0.955699	0.960049	4,339 → 4,309
+2	1.191295	1.228562	1.228702	2,269 → 2,257
+3	0.971389	0.948907	0.967836	7,184 → 7,170
+4	1.140082	1.109781	1.107162	29,626 → 29,175
+Total	5.346700	5.264023	5.285731	
+No legality failures, all within 600s. testcase3's regression is mostly fixed (-0.023→-0.004), testcase1 improved a bit, but the total is still below the no-insertion baseline (-0.061), and testcase4 got marginally worse.
+
+The real finding: candidate counts barely changed (18683→18597, 29626→29175, etc.)
+hypothesis that "resize-only resolves many baseline violations, shrinking the candidate set" was wrong for these testcases. The set of violating paths is largely stable between raw baseline and the resize-only-optimal solution — paths that are bad stay bad either way. So refining which signal detects violations didn't address the actual bottleneck: the area tax from inserting on thousands of edges, each permanently paying at least the smallest cell's cost.
+
 ********** 0624 22:00 **********
 Option 1: Ghost Buffers (Pre-allocation): scan the baseline (pre-optimization) violating setup paths, and for each one's launch/capture FF, check whether its direct parent (d->nodes[ff_id].parent) has nchildren > 1 
 Testcase	Without insertion	With insertion	Δ	Buffers inserted

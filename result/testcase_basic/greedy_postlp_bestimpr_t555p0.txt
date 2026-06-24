@@ -13,10 +13,10 @@ Total area   : 2.700000
 Score (a=0.6, b=0.2, g=0.2): 0.000000
 
 === after LP init ===
-SS setup WNS : 0.114000  TNS : 0.000000
+SS setup WNS : 0.101000  TNS : 0.000000
 FF hold  WNS : 0.140800  TNS : 0.000000
-Total area   : 3.250000
-Score (a=0.6, b=0.2, g=0.2): -0.040741
+Total area   : 2.700000
+Score (a=0.6, b=0.2, g=0.2): 0.000000
 
 === after greedy ===
 SS setup WNS : 0.114000  TNS : 0.000000
