@@ -1,3 +1,16 @@
+********** 0624 11:48 **********
+Summary: branch-order randomization results
+Testcase	Bug-fixes only	Perturb/restart (reverted)	Order randomization (new)	Δ vs best-of-prior
+0	1.001531	0.993167	1.002265	+0.0007
+1	1.030964	1.033750	1.041669	+0.0079
+2	1.180906	1.192389	1.191295	−0.0011
+3	0.961761	0.962028	0.971389	+0.0094
+4	1.140082	1.140041	1.140082	0 (no spare time either way)
+Total	5.315244	5.321375	5.346700	+0.0253
+Order randomization comes out ahead overall — it wins outright on testcase0/1/3, is essentially tied with perturbation/restart on testcase2 (within noise), and ties on testcase4 (which never has idle time to spend on either technique). The log confirms genuine activity: e.g. testcase1 found improvements in 3 of 25 shuffled-order attempts, testcase3 in 2 of 8 and 3 of 5 across its two greedy calls — each accepted attempt strictly improves the score since we only keep an attempt's result if it beats the best found so far.
+
+This is a clean, somewhat simpler mechanism than perturbation/restart (no need to tune kick strength), and it's currently winning on the aggregate. 
+
 ********** 0624 07:23 **********
 Summary
 1. Rewrote the hot loop in greedy_postlp.cpp: replaced the O(n_paths) full rescan + O(subtree) re-annotation on every single candidate try with closed-form incremental tracking — resizing a buffer shifts its entire subtree's clock latency by the same delta, so each affected path's new slack is computed analytically (sign = whether launch/capture is downstream), with a running multiset for WNS and running sum for TNS. Per-pass authoritative resync bounds any drift to within one pass.

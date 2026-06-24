@@ -2,8 +2,8 @@ greedy_postlp result
 testcase_dir: testcase/testcase0
 time_limit_sec: 555.0
 lp_init_ok: 1
-greedy_elapsed_sec: 191.535
-timing_evals: 955080
+greedy_elapsed_sec: 406.314
+timing_evals: 1637280
 solver: greedy_post_lp
 
 === baseline (ori) ===
@@ -19,7 +19,7 @@ Total area   : 6587.591320
 Score (a=0.6, b=0.2, g=0.2): 0.181581
 
 === after greedy ===
-SS setup WNS : -0.391300  TNS : -252.393700
-FF hold  WNS : -0.052700  TNS : -0.310900
-Total area   : 3827.007120
-Score (a=0.6, b=0.2, g=0.2): 0.993156
+SS setup WNS : -0.377300  TNS : -249.302200
+FF hold  WNS : -0.052700  TNS : -0.349200
+Total area   : 4031.813920
+Score (a=0.6, b=0.2, g=0.2): 1.002265
