@@ -68,6 +68,9 @@ typedef struct {
     double wns_hold_ff;
     double tns_hold_ff;
     double total_area;
+
+    /** Next index to use for naming an inserted buffer NEW_BUF_<this>, then increment. */
+    int next_new_buf_id;
 } PdDesign;
 
 #endif

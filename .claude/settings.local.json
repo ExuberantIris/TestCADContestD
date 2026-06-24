@@ -52,7 +52,23 @@
       "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && rm -rf /tmp/order2b && mkdir -p /tmp/order2b && timeout 250 env SA_TIME_LIMIT=220 ./sa_solver testcase/testcase2 /tmp/order2b 2>&1\")",
       "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make run-all 2>&1 | tee /tmp/run_all_order.log\")",
       "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && cat result_summary.csv && echo '---' && grep wall_elapsed_sec result/testcase_basic/result.txt\")",
-      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && grep -E 'order attempts|wall_elapsed_sec' /tmp/run_all_order.log result/testcase*/result.txt 2>/dev/null | grep -v testcase_basic\")"
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && grep -E 'order attempts|wall_elapsed_sec' /tmp/run_all_order.log result/testcase*/result.txt 2>/dev/null | grep -v testcase_basic\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make test_pd_mutate 2>&1 | tail -40\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && ./test_pd_mutate testcase/testcase2\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && ./test_pd_mutate testcase/testcase2 2>&1 | tail -20\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make test_pd_mutate 2>&1 | tail -20 && ./test_pd_mutate testcase/testcase2 2>&1\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && grep -n -B2 -A6 'NEW_BUF_0' result/testcase_mutate_unittest/modified_clk_tree.structure\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make test_pd_checker 2>&1 | tail -30\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && ./test_pd_checker testcase/testcase2 2>&1\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make test_pd_checker 2>&1 | tail -10 && ./test_pd_checker testcase/testcase2 2>&1\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && ./test_pd_checker testcase/testcase0 2>&1\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make test_pd_checker 2>&1 | tail -5 && ./test_pd_checker testcase/testcase0 2>&1\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make test_pd_checker 2>&1 | tail -3 && echo '=== testcase0 ===' && ./test_pd_checker testcase/testcase0 2>&1 && echo '=== testcase2 ===' && ./test_pd_checker testcase/testcase2 2>&1\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && g++ -std=c++17 -Wall -Wextra -O2 -Iinclude -c -o src/main.o src/main.cpp 2>&1\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && rm -rf /tmp/gate2 && mkdir -p /tmp/gate2 && timeout 60 env SA_TIME_LIMIT=40 ./sa_solver testcase/testcase2 /tmp/gate2 2>&1\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make run-all 2>&1 | tee /tmp/run_all_gate.log\")",
+      "Bash(wsl.exe -e bash -lc 'cd '\\\\''/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD'\\\\'' && cat result_summary.csv && echo '\\\\''---legality check failures \\(should be none\\)---'\\\\'' && grep -c '\\\\''LEGALITY CHECK FAILED'\\\\'' /tmp/run_all_gate.log && echo '\\\\''---timing---'\\\\'' && for tc in testcase0 testcase1 testcase2 testcase3 testcase4; do grep wall_elapsed_sec result/$tc/result.txt; done')",
+      "Bash(wsl.exe -e bash -lc 'cd '\\\\''/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD'\\\\'' && for tc in testcase0 testcase1 testcase2 testcase3 testcase4; do grep wall_elapsed_sec result/$tc/result.txt; done')"
     ]
   }
 }

@@ -16,7 +16,9 @@ PD_SRCS = $(PD_DIR)/src/pd_parser.c \
           $(PD_DIR)/src/pd_util.c \
           $(PD_DIR)/src/pd_clock.c \
           $(PD_DIR)/src/pd_timing.c \
-          $(PD_DIR)/src/pd_output.c
+          $(PD_DIR)/src/pd_output.c \
+          $(PD_DIR)/src/pd_mutate.c \
+          $(PD_DIR)/src/pd_checker.c
 
 SA_SRCS = src/main.cpp \
           src/lp_branch.cpp \
@@ -33,11 +35,17 @@ SA_OBJS = $(SA_SRCS:.cpp=.o)
 UNITTEST_SRCS = unittest/test_buffer_chain_dp.cpp
 UNITTEST_OBJS = $(UNITTEST_SRCS:.cpp=.o)
 
+MUTATE_TEST_SRCS = unittest/test_pd_mutate.cpp
+MUTATE_TEST_OBJS = $(MUTATE_TEST_SRCS:.cpp=.o)
+
+CHECKER_TEST_SRCS = unittest/test_pd_checker.cpp
+CHECKER_TEST_OBJS = $(CHECKER_TEST_SRCS:.cpp=.o)
+
 PRINT_LP_SRCS = tools/print_lp_input.cpp src/lp_print_input.cpp
 PRINT_LP_OBJS = tools/print_lp_input.o src/lp_print_input.o
 
 # 將 report 加入 PHONY 清單
-.PHONY: all build run run-all clean unittest print_lp_input report
+.PHONY: all build run run-all clean unittest test_pd_mutate test_pd_checker print_lp_input report
 
 all: run
 
@@ -99,6 +107,12 @@ sa_solver: $(PD_OBJS) $(SA_OBJS)
 unittest: sa_solver $(UNITTEST_OBJS)
 	$(CXX) $(CXXFLAGS) -o test_buffer_chain_dp $(PD_OBJS) $(UNITTEST_OBJS) src/lp_branch.o src/lp_buffer_dp.o $(LDFLAGS)
 
+test_pd_mutate: $(PD_OBJS) $(MUTATE_TEST_OBJS)
+	$(CXX) $(CXXFLAGS) -o test_pd_mutate $(PD_OBJS) $(MUTATE_TEST_OBJS) $(LDFLAGS)
+
+test_pd_checker: $(PD_OBJS) $(CHECKER_TEST_OBJS)
+	$(CXX) $(CXXFLAGS) -o test_pd_checker $(PD_OBJS) $(CHECKER_TEST_OBJS) $(LDFLAGS)
+
 $(PD_DIR)/src/%.lp.o: $(PD_DIR)/src/%.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
@@ -112,4 +126,4 @@ unittest/%.o: unittest/%.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(PD_OBJS) $(SA_OBJS) $(UNITTEST_OBJS) $(PRINT_LP_OBJS) sa_solver test_buffer_chain_dp print_lp_input
+	rm -f $(PD_OBJS) $(SA_OBJS) $(UNITTEST_OBJS) $(MUTATE_TEST_OBJS) $(CHECKER_TEST_OBJS) $(PRINT_LP_OBJS) sa_solver test_buffer_chain_dp test_pd_mutate test_pd_checker print_lp_input

@@ -66,6 +66,7 @@ int main(int argc, char **argv)
 {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     PdDesign design{};
+    PdDesign orig_design{}; // untouched copy of the input, kept for the final legality gate
     LpProblem problem;
     SaSolveResult sa_result{}; // 保留這個 struct 用來當作資料載體傳給 output
     LpSolution lp_init{};
@@ -111,9 +112,18 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    // Independent load (not a mutated copy of `design`) - this is the reference the final
+    // legality gate compares against, and the safe fallback output if that gate ever fails.
+    if (pd_load_design(testcase_dir, &orig_design, err, sizeof(err)) != 0) {
+        std::fprintf(stderr, "Load failed (orig copy): %s\n", err);
+        pd_free_design(&design);
+        return 1;
+    }
+
     if (lp_build_from_design(&problem, &design, err, sizeof(err)) != 0) {
         std::fprintf(stderr, "Problem build failed: %s\n", err);
         pd_free_design(&design);
+        pd_free_design(&orig_design);
         return 1;
     }
 
@@ -129,6 +139,7 @@ int main(int argc, char **argv)
         dp_ff.build(&design, LpBufferDpCorner::FF, dp_max_delay) != 0) {
         std::fprintf(stderr, "DP table build failed\n");
         pd_free_design(&design);
+        pd_free_design(&orig_design);
         return 1;
     }
 
@@ -321,6 +332,7 @@ int main(int argc, char **argv)
         // sa_solution_free(&sa_result);
         lp_problem_free(&problem);
         pd_free_design(&design);
+        pd_free_design(&orig_design);
         return 1;
     }
 
@@ -329,6 +341,25 @@ int main(int argc, char **argv)
                                  opt.area, problem.wns_ss_ori, problem.tns_ss_ori, problem.wns_ff_ori,
                                  problem.tns_ff_ori, problem.area_ori);
     lp_print_metrics("after optimize", &opt);
+
+    // Final safety gate: the contest disqualifies (score 0) any testcase whose output violates
+    // the structural rules (existing components preserved & in the same relative order, no
+    // dangling pins, fanout within each cell's limit, unique names, new buffers named
+    // NEW_BUF_X). If our own search ever produced an illegal result despite our best efforts,
+    // fall back to re-emitting the untouched original design - a guaranteed-legal, zero-
+    // improvement result is far better than risking disqualification.
+    const PdDesign *design_to_write = &design;
+    if (pd_check_legality(&orig_design, &design, err, sizeof(err)) != 0) {
+        std::fprintf(stderr,
+                     "LEGALITY CHECK FAILED, falling back to the original design: %s\n", err);
+        design_to_write = &orig_design;
+        lp_compute_metrics(&orig_design, &opt);
+        opt.score = lp_compute_score(opt.wns_setup_ss, opt.tns_setup_ss, opt.wns_hold_ff,
+                                     opt.tns_hold_ff, opt.area, problem.wns_ss_ori,
+                                     problem.tns_ss_ori, problem.wns_ff_ori, problem.tns_ff_ori,
+                                     problem.area_ori);
+        lp_print_metrics("after optimize (fallback: legality check failed)", &opt);
+    }
 
     const double wall_elapsed =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - wall_t0).count();
@@ -355,7 +386,7 @@ int main(int argc, char **argv)
         if (pd_join_path(struct_path, sizeof(struct_path), argv[2],
                          "modified_clk_tree.structure") != 0) {
             std::fprintf(stderr, "Output path too long\n");
-        } else if (pd_write_structure(&design, struct_path, err, sizeof(err)) != 0) {
+        } else if (pd_write_structure(design_to_write, struct_path, err, sizeof(err)) != 0) {
             std::fprintf(stderr, "Write structure failed: %s\n", err);
         } else {
             std::printf("Wrote %s\n", struct_path);
@@ -365,5 +396,6 @@ int main(int argc, char **argv)
     // sa_solution_free(&sa_result);
     lp_problem_free(&problem);
     pd_free_design(&design);
+    pd_free_design(&orig_design);
     return 0;
 }
