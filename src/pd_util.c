@@ -45,3 +45,17 @@ int pd_find_node_by_name(const PdDesign *d, const char *name)
     }
     return -1;
 }
+
+int pd_is_new_buf_name(const char *name)
+{
+    int idx;
+    int consumed;
+
+    if (strncmp(name, "NEW_BUF_", 8) != 0)
+        return 0;
+    if (sscanf(name + 8, "%d%n", &idx, &consumed) != 1)
+        return 0;
+    if (idx < 0)
+        return 0;
+    return name[8 + consumed] == '\0';
+}

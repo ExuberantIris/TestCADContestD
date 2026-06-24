@@ -1,5 +1,8 @@
 #include "pd_checker.h"
 
+#include "pd_mutate.h"
+#include "pd_util.h"
+
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -84,19 +87,20 @@ static int failf(char *err, size_t err_sz, const char *fmt, ...)
     return -1;
 }
 
-/* "NEW_BUF_<non-negative integer>" with nothing else trailing. */
-static int is_new_buf_name(const char *name)
+/* Marks every node reachable from `mod`'s root via children pointers - pd_remove_buffer
+ * leaves a removed node sitting in mod->nodes[] (so node ids stay stable), unreachable from
+ * the root. Such orphans must be excluded from every per-node legality check below, since
+ * pd_write_structure never emits them either (it walks the same children pointers). */
+static void mark_reachable(const PdDesign *d, int node_id, char *reach)
 {
-    int idx;
-    int consumed;
+    const PdNode *n = &d->nodes[node_id];
+    int i;
 
-    if (strncmp(name, "NEW_BUF_", 8) != 0)
-        return 0;
-    if (sscanf(name + 8, "%d%n", &idx, &consumed) != 1)
-        return 0;
-    if (idx < 0)
-        return 0;
-    return name[8 + consumed] == '\0';
+    if (reach[node_id])
+        return;
+    reach[node_id] = 1;
+    for (i = 0; i < n->nchildren; i++)
+        mark_reachable(d, n->children[i], reach);
 }
 
 int pd_check_legality(const PdDesign *orig, const PdDesign *mod, char *err, size_t err_sz)
@@ -105,59 +109,103 @@ int pd_check_legality(const PdDesign *orig, const PdDesign *mod, char *err, size
     CheckHashMap mod_names = {0};
     CheckHashMap orig_names = {0};
     int rc = 0;
+    char *reach;
 
     if (!orig || !mod)
         return failf(err, err_sz, "pd_check_legality: null design");
     if (mod->n_nodes <= 0)
         return failf(err, err_sz, "pd_check_legality: modified design is empty");
 
+    /* Nodes pd_remove_buffer has spliced out of the tree stay in mod->nodes[] but are no
+     * longer reachable from the root - every per-node check below must skip them, since they
+     * are not part of the design pd_write_structure will actually emit. */
+    reach = (char *)calloc((size_t)mod->n_nodes, 1);
+    if (!reach)
+        return failf(err, err_sz, "pd_check_legality: out of memory");
+    mark_reachable(mod, 0, reach);
+
     /* --- Check 1: structural self-consistency of `mod` ----------------------------------- */
     for (i = 0; i < mod->n_nodes; i++) {
         const PdNode *n = &mod->nodes[i];
 
+        if (!reach[i])
+            continue;
+
         if (i == 0) {
-            if (n->kind != PD_NODE_ROOT || n->parent != -1)
-                return failf(err, err_sz, "pd_check_legality: node 0 is not a valid root");
+            if (n->kind != PD_NODE_ROOT || n->parent != -1) {
+                rc = failf(err, err_sz, "pd_check_legality: node 0 is not a valid root");
+                goto done;
+            }
         } else {
-            if (n->kind == PD_NODE_ROOT)
-                return failf(err, err_sz, "'%s': only node 0 may be the clock root", n->name);
-            if (n->parent < 0 || n->parent >= mod->n_nodes)
-                return failf(err, err_sz, "'%s': parent index %d out of range", n->name, n->parent);
+            if (n->kind == PD_NODE_ROOT) {
+                rc = failf(err, err_sz, "'%s': only node 0 may be the clock root", n->name);
+                goto done;
+            }
+            if (n->parent < 0 || n->parent >= mod->n_nodes) {
+                rc = failf(err, err_sz, "'%s': parent index %d out of range", n->name, n->parent);
+                goto done;
+            }
         }
 
         if (n->kind == PD_NODE_FF) {
-            if (n->nchildren != 0)
-                return failf(err, err_sz, "FF '%s' drives %d children (FF must be a sink)",
-                            n->name, n->nchildren);
+            if (n->nchildren != 0) {
+                rc = failf(err, err_sz, "FF '%s' drives %d children (FF must be a sink)",
+                          n->name, n->nchildren);
+                goto done;
+            }
         } else if (n->nchildren < 1) {
-            return failf(err, err_sz, "'%s' has no children (dangling output pin)", n->name);
+            rc = failf(err, err_sz, "'%s' has no children (dangling output pin)", n->name);
+            goto done;
         }
 
         if (n->kind == PD_NODE_BUF) {
-            if (n->cell_idx < 0 || n->cell_idx >= mod->n_cells)
-                return failf(err, err_sz, "buffer '%s' has invalid cell index %d", n->name,
-                            n->cell_idx);
-            if (n->nchildren > mod->cells[n->cell_idx].max_fanout)
-                return failf(err, err_sz, "buffer '%s' drives %d > max_fanout %d of cell '%s'",
-                            n->name, n->nchildren, mod->cells[n->cell_idx].max_fanout,
-                            mod->cells[n->cell_idx].name);
+            if (n->cell_idx < 0 || n->cell_idx >= mod->n_cells) {
+                rc = failf(err, err_sz, "buffer '%s' has invalid cell index %d", n->name,
+                          n->cell_idx);
+                goto done;
+            }
+            if (n->nchildren > mod->cells[n->cell_idx].max_fanout) {
+                rc = failf(err, err_sz, "buffer '%s' drives %d > max_fanout %d of cell '%s'",
+                          n->name, n->nchildren, mod->cells[n->cell_idx].max_fanout,
+                          mod->cells[n->cell_idx].name);
+                goto done;
+            }
+            /* The synthetic zero-area placeholder cell (see pd_add_zero_cell) is an internal
+             * search device, never a real library cell - a buffer left assigned to it would
+             * write out a cell name the contest's library doesn't contain. A NEW_BUF_* that
+             * resize shrinks onto it must be physically removed (pd_remove_buffer), not just
+             * left in place; reaching this point means that cleanup didn't happen. */
+            if (pd_cell_is_zero(&mod->cells[n->cell_idx])) {
+                rc = failf(err, err_sz,
+                          "buffer '%s' still assigned the internal zero-area placeholder cell",
+                          n->name);
+                goto done;
+            }
         }
 
         for (j = 0; j < n->nchildren; j++) {
             const int cid = n->children[j];
-            if (cid < 0 || cid >= mod->n_nodes)
-                return failf(err, err_sz, "'%s': child index %d out of range", n->name, cid);
-            if (mod->nodes[cid].parent != i)
-                return failf(err, err_sz,
-                            "'%s' lists '%s' as a child, but its parent pointer disagrees",
-                            n->name, mod->nodes[cid].name);
+            if (cid < 0 || cid >= mod->n_nodes) {
+                rc = failf(err, err_sz, "'%s': child index %d out of range", n->name, cid);
+                goto done;
+            }
+            if (mod->nodes[cid].parent != i) {
+                rc = failf(err, err_sz,
+                          "'%s' lists '%s' as a child, but its parent pointer disagrees",
+                          n->name, mod->nodes[cid].name);
+                goto done;
+            }
         }
     }
 
     /* --- Check 2: globally unique names ---------------------------------------------------- */
-    if (check_hashmap_init(&mod_names, mod->n_nodes) != 0)
-        return failf(err, err_sz, "pd_check_legality: out of memory");
+    if (check_hashmap_init(&mod_names, mod->n_nodes) != 0) {
+        rc = failf(err, err_sz, "pd_check_legality: out of memory");
+        goto done;
+    }
     for (i = 0; i < mod->n_nodes; i++) {
+        if (!reach[i])
+            continue;
         if (check_hashmap_get(&mod_names, mod->nodes[i].name) >= 0) {
             rc = failf(err, err_sz, "duplicate component name: '%s'", mod->nodes[i].name);
             goto done;
@@ -186,9 +234,11 @@ int pd_check_legality(const PdDesign *orig, const PdDesign *mod, char *err, size
         }
     }
     for (i = 0; i < mod->n_nodes; i++) {
+        if (!reach[i])
+            continue;
         if (check_hashmap_get(&orig_names, mod->nodes[i].name) >= 0)
             continue; /* pre-existing component, already checked above */
-        if (mod->nodes[i].kind != PD_NODE_BUF || !is_new_buf_name(mod->nodes[i].name)) {
+        if (mod->nodes[i].kind != PD_NODE_BUF || !pd_is_new_buf_name(mod->nodes[i].name)) {
             rc = failf(err, err_sz,
                       "unrecognized component '%s' (new components must be buffers named NEW_BUF_X)",
                       mod->nodes[i].name);
@@ -229,6 +279,7 @@ int pd_check_legality(const PdDesign *orig, const PdDesign *mod, char *err, size
     }
 
 done:
+    free(reach);
     check_hashmap_free(&mod_names);
     check_hashmap_free(&orig_names);
     return rc;

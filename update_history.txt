@@ -1,3 +1,32 @@
+********** 0625 02:38 **********
+Per-testcase breakdown vs. the last insertion attempt (5.285731 total):
+
+Testcase	Before (insert, no removal)	After (zero-cell removal)	Δ
+testcase0	1.021982	1.180833	+0.159
+testcase1	0.960049	1.122668	+0.163
+testcase2	1.228702	1.382480	+0.154
+testcase3	0.967836	1.133733	+0.166
+testcase4	1.107162	1.270860	+0.164
+Total	5.285731	6.090574	+0.805
+
+這次改動小結
+核心想法：插入新 buffer 永遠要付面積稅，且原本沒有「撤銷」機制。
+解法是在 cell library 裡加一顆只有 NEW_BUF_* 能選的虛擬「zero cell」(面積=0、delay=0)，
+讓 resize 搜尋過程中可以連續地把插入的 buffer 縮到「等於沒插入」，最後再物理移除。
+
+改動對應檔案：
+
+改動	檔案
+新增 pd_is_new_buf_name（從 pd_checker.c 搬出共用）	pd_util.h / pd_util.c:49
+新增 pd_add_zero_cell、pd_cell_is_zero、pd_remove_buffer	pd_mutate.h / pd_mutate.c:172,218,247
+reach[] 可達性修正（移除後的孤兒節點不再誤判非法）+ zero-cell 洩漏檢查	pd_checker.c
+LpBranch 新增 allow_zero_cell 欄位；lp_cell_delay_bounds 簽名加參數	lp_types.hpp
+add_branch 判斷 child 是否為 NEW_BUF_* 來設定 allow_zero_cell，並傳入 bounds 計算	lp_branch.cpp
+build_branch_candidates / sync_graph_from_delays 守門 zero cell	greedy_postlp.cpp:124,178
+最終 nearest-cell 搜尋守門 zero cell	sa_apply.cpp
+Phase 0 插入後呼叫 pd_add_zero_cell（main.cpp:193）；消除幽靈Buffer 迴圈守門（main.cpp:300）；Phase 3 sa_apply_solution 後掃描+移除（main.cpp:453）	main.cpp
+新單元測試（25 項全過）+ Makefile 註冊	test_pd_remove_buffer.cpp / Makefile
+
 ********** 0625 00:03 **********
 LP-init (resize-only, no insertion) → find residual violations → select insertion candidates from those → apply insertions → rebuild LpProblem → LP-init again (now with the new buffers as ordinary ExistingBuf branches) → Greedy
 Refined selection helped, but didn't fix the core problem

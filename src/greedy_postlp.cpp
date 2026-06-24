@@ -123,6 +123,8 @@ static void build_branch_candidates(const PdDesign *d, const LpProblem *pb,
         std::unordered_map<long long, int> best_cell;
         for (int ci = 0; ci < d->n_cells; ci++) {
             const PdCell *c = &d->cells[ci];
+            if (!br.allow_zero_cell && pd_cell_is_zero(c))
+                continue;
             if (br.fanout > c->max_fanout)
                 continue;
 
@@ -173,6 +175,8 @@ static void sync_graph_from_delays(PdDesign *d, const LpProblem *pb, std::vector
 
         for (int ci = 0; ci < d->n_cells; ci++) {
             const PdCell *c = &d->cells[ci];
+            if (!br.allow_zero_cell && pd_cell_is_zero(c))
+                continue;
             if (br.fanout > c->max_fanout)
                 continue;
             const double css = lp_eval_branch_delay_ss(d, c, br.fanout);

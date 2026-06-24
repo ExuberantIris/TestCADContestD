@@ -168,3 +168,83 @@ int pd_insert_buffer_on_child(PdDesign *d, int parent_id, int child_id, int new_
         *out_new_node_id = new_id;
     return 0;
 }
+
+int pd_remove_buffer(PdDesign *d, int buf_node_id, char *err, size_t err_sz)
+{
+    PdNode *b;
+    PdNode *p;
+    int parent_id, child_id;
+    int slot, i;
+
+    if (!d || buf_node_id < 0 || buf_node_id >= d->n_nodes)
+        return fail(err, err_sz, "pd_remove_buffer: invalid node id");
+
+    b = &d->nodes[buf_node_id];
+    if (b->kind != PD_NODE_BUF)
+        return fail(err, err_sz, "pd_remove_buffer: target node is not a buffer");
+    if (b->nchildren != 1)
+        return fail(err, err_sz, "pd_remove_buffer: only single-child buffers can be removed");
+    if (b->parent < 0 || b->parent >= d->n_nodes)
+        return fail(err, err_sz, "pd_remove_buffer: buffer has no parent");
+
+    parent_id = b->parent;
+    child_id = b->children[0];
+    p = &d->nodes[parent_id];
+
+    slot = -1;
+    for (i = 0; i < p->nchildren; i++) {
+        if (p->children[i] == buf_node_id) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot < 0)
+        return fail(err, err_sz, "pd_remove_buffer: parent/child link inconsistent");
+
+    /* Splice out: parent's one slot now points straight at the (former) grandchild, and that
+     * child's whole subtree shifts up one level to take the removed buffer's old position. */
+    p->children[slot] = child_id;
+    d->nodes[child_id].parent = parent_id;
+    bump_level_recursive(d, child_id, -1);
+
+    free(b->children);
+    b->children = NULL;
+    b->nchildren = 0;
+    b->parent = -1;
+
+    return 0;
+}
+
+int pd_add_zero_cell(PdDesign *d, int *out_cell_idx, char *err, size_t err_sz)
+{
+    PdCell *c;
+    int idx;
+    int i;
+
+    if (!d)
+        return fail(err, err_sz, "pd_add_zero_cell: null design");
+    if (d->n_cells >= PD_MAX_CELLS)
+        return fail(err, err_sz, "pd_add_zero_cell: cell library full");
+
+    idx = d->n_cells;
+    c = &d->cells[idx];
+    memset(c, 0, sizeof(*c));
+    snprintf(c->name, PD_MAX_NAME, "__ZERO_CELL__");
+    c->width = 0.0;
+    c->height = 0.0;
+    c->max_fanout = PD_MAX_FANOUT_TBL;
+    for (i = 0; i < PD_MAX_FANOUT_TBL; i++) {
+        c->ss_delay[i] = 0.0;
+        c->ff_delay[i] = 0.0;
+    }
+
+    d->n_cells = idx + 1;
+    if (out_cell_idx)
+        *out_cell_idx = idx;
+    return 0;
+}
+
+int pd_cell_is_zero(const PdCell *c)
+{
+    return c->width <= 0.0 && c->height <= 0.0;
+}

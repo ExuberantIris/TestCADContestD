@@ -183,6 +183,20 @@ int main(int argc, char **argv)
                         "(resize-only WNS_ss=%.6f WNS_ff=%.6f)\n",
                         n_inserted, pass1_ctx.wns_ss, pass1_ctx.wns_ff);
 
+                    // Give the resize search a "free" cell that only the buffers just inserted
+                    // are allowed to pick (see LpBranch::allow_zero_cell) - resizing one all the
+                    // way down to it and then physically removing it (Phase 3) is electrically
+                    // identical to never having inserted it, so every insertion's area tax can
+                    // be continuously reconsidered and undone instead of being a permanent,
+                    // unrecoverable cost. Must exist before the lp_build_from_design rebuild
+                    // below, since that's what computes each branch's bounds/eligibility.
+                    if (pd_add_zero_cell(&design, nullptr, err, sizeof(err)) != 0) {
+                        std::fprintf(stderr, "pd_add_zero_cell failed: %s\n", err);
+                        pd_free_design(&design);
+                        pd_free_design(&orig_design);
+                        return 1;
+                    }
+
                     // Topology changed - rebuild everything that depends on it.
                     if (lp_build_from_design(&problem, &design, err, sizeof(err)) != 0) {
                         std::fprintf(stderr, "Problem rebuild after insertion failed: %s\n", err);
@@ -283,6 +297,7 @@ int main(int argc, char **argv)
             int best_ci = -1;
             double min_err = 1e9;
             for (int ci = 0; ci < design.n_cells; ci++) {
+                if (!br.allow_zero_cell && pd_cell_is_zero(&design.cells[ci])) continue;
                 if (br.fanout > design.cells[ci].max_fanout) continue;
                 double css = lp_eval_branch_delay_ss(&design, &design.cells[ci], br.fanout);
                 double err = std::fabs(css - target_ss);
@@ -416,6 +431,37 @@ int main(int argc, char **argv)
         pd_free_design(&design);
         pd_free_design(&orig_design);
         return 1;
+    }
+
+    // Any NEW_BUF_* the search shrank all the way down to the synthetic zero-area/zero-delay
+    // cell was already contributing exactly zero to both timing and area - physically remove
+    // it now so the output never references a cell the real library doesn't contain. Only ever
+    // targets NEW_BUF_* names (never an existing component), matching pd_remove_buffer's
+    // contract; if a zero-cell assignment somehow ended up elsewhere, leave it for the legality
+    // gate below to catch instead of silently deleting something it shouldn't.
+    {
+        int n_removed = 0;
+        for (int i = 0; i < design.n_nodes; i++) {
+            PdNode &n = design.nodes[i];
+            if (n.kind != PD_NODE_BUF || n.cell_idx < 0)
+                continue;
+            if (!pd_cell_is_zero(&design.cells[n.cell_idx]))
+                continue;
+            if (!pd_is_new_buf_name(n.name))
+                continue;
+            char rm_err[256];
+            if (pd_remove_buffer(&design, i, rm_err, sizeof(rm_err)) != 0) {
+                std::fprintf(stderr, "pd_remove_buffer('%s') failed: %s\n", n.name, rm_err);
+                continue;
+            }
+            n_removed++;
+        }
+        if (n_removed > 0) {
+            std::printf("Removed %d decoupling buffer(s) that resize shrank to zero area/delay\n",
+                       n_removed);
+            pd_annotate_clock(&design);
+            pd_compute_timing(&design);
+        }
     }
 
     lp_compute_metrics(&design, &opt);

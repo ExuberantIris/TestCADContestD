@@ -26,7 +26,9 @@ int sa_apply_solution(PdDesign *d, const LpProblem *pb, const LpSolution *sol,
         // 暴力掃描 Library，找出最接近的
         for (int ci = 0; ci < d->n_cells; ci++) {
             const PdCell *c = &d->cells[ci];
-            if (br.fanout > c->max_fanout) 
+            if (!br.allow_zero_cell && pd_cell_is_zero(c))
+                continue;
+            if (br.fanout > c->max_fanout)
                 continue;
 
             double css = lp_eval_branch_delay_ss(d, c, br.fanout);

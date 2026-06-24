@@ -19,6 +19,12 @@ struct LpBranch {
     double d_ff_min = 0.0;
     double d_ff_max = 0.0;
     double area_per_ss = 0.0;
+    /** True only for an ExistingBuf branch whose child is a NEW_BUF_* node - the sole case
+     *  where the synthetic zero-area/zero-delay cell (pd_add_zero_cell) is a legal resize
+     *  target. An *original* buffer must never be able to select it (that would be an illegal
+     *  silent deletion), so every cell-selection loop in the resize search (bounds computation,
+     *  greedy candidate lists, nearest-cell snapping) must gate the zero cell behind this flag. */
+    bool allow_zero_cell = false;
 };
 
 struct LpProblem {
@@ -51,5 +57,5 @@ int lp_build_from_design(LpProblem *pb, PdDesign *d, char *err, std::size_t err_
 
 double lp_eval_branch_delay_ss(const PdDesign *d, const PdCell *c, int fanout);
 double lp_eval_branch_delay_ff(const PdDesign *d, const PdCell *c, int fanout);
-void lp_cell_delay_bounds(const PdDesign *d, int cell_idx, int fanout, double *ss_min,
-                          double *ss_max, double *ff_min, double *ff_max);
+void lp_cell_delay_bounds(const PdDesign *d, int cell_idx, int fanout, bool allow_zero_cell,
+                          double *ss_min, double *ss_max, double *ff_min, double *ff_max);

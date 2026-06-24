@@ -42,11 +42,13 @@ double lp_eval_branch_delay_ff(const PdDesign * /*d*/, const PdCell *c, int fano
     return c->ff_delay[fanout - 1];
 }
 
-void lp_cell_delay_bounds(const PdDesign *d, int /*cell_idx*/, int fanout, double *ss_min,
-                          double *ss_max, double *ff_min, double *ff_max)
+void lp_cell_delay_bounds(const PdDesign *d, int /*cell_idx*/, int fanout, bool allow_zero_cell,
+                          double *ss_min, double *ss_max, double *ff_min, double *ff_max)
 {
     double ss_lo = 1e30, ss_hi = 0.0, ff_lo = 1e30, ff_hi = 0.0;
     for (int i = 0; i < d->n_cells; i++) {
+        if (!allow_zero_cell && pd_cell_is_zero(&d->cells[i]))
+            continue;
         const double s = lp_eval_branch_delay_ss(d, &d->cells[i], fanout);
         const double f = lp_eval_branch_delay_ff(d, &d->cells[i], fanout);
         ss_lo = std::min(ss_lo, s);
@@ -74,11 +76,15 @@ static void add_branch(LpProblem *pb, int parent, int child, LpBranchKind kind, 
     b.child_node = child;
     b.kind = kind;
     b.fanout = fanout;
+    // Only a branch whose child is a buffer *we* inserted (named NEW_BUF_*) may ever resize
+    // down to the synthetic zero-area cell - an original buffer doing so would be an illegal
+    // silent deletion of an existing component.
+    b.allow_zero_cell = (kind == LpBranchKind::ExistingBuf) && pd_is_new_buf_name(cn->name);
 
     if (kind == LpBranchKind::ExistingBuf) {
         b.cell_idx = cn->cell_idx;
-        lp_cell_delay_bounds(d, b.cell_idx, b.fanout, &b.d_ss_min, &b.d_ss_max, &b.d_ff_min,
-                             &b.d_ff_max);
+        lp_cell_delay_bounds(d, b.cell_idx, b.fanout, b.allow_zero_cell, &b.d_ss_min, &b.d_ss_max,
+                             &b.d_ff_min, &b.d_ff_max);
         if (cn->cell_idx >= 0) {
             const PdCell *c = &d->cells[cn->cell_idx];
             b.area_per_ss = c->width * c->height;

@@ -1,0 +1,25 @@
+greedy_postlp result
+testcase_dir: testcase/testcase0
+time_limit_sec: 197.4
+lp_init_ok: 1
+greedy_elapsed_sec: 186.211
+timing_evals: 2579187
+solver: greedy_post_lp
+
+=== baseline (ori) ===
+SS setup WNS : -0.528600  TNS : -1134.160100
+FF hold  WNS : -0.106500  TNS : -2.988000
+Total area   : 6997.009120
+Score (a=0.6, b=0.2, g=0.2): 0.000000
+
+=== after LP init ===
+SS setup WNS : -0.528600  TNS : -1134.160100
+FF hold  WNS : -0.106500  TNS : -3.022500
+Total area   : 6997.009120
+Score (a=0.6, b=0.2, g=0.2): 0.000000
+
+=== after greedy ===
+SS setup WNS : -0.351600  TNS : -126.436000
+FF hold  WNS : -0.033800  TNS : -0.060400
+Total area   : 3554.538960
+Score (a=0.6, b=0.2, g=0.2): 1.164901
