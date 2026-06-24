@@ -1,3 +1,7 @@
+********** 0624 20:48 **********
+Implemented pd_insert_buffer_on_child() (src/pd_mutate.c / include/pd_mutate.h) 
+— inserts a new buffer between a parent and exactly one of its children, leaving every other child (sibling) completely untouched. 
+
 ********** 0624 20:26 **********
 Built and integrated pd_check_legality() 
 — verifies a modified design is a legal evolution of the original
@@ -5,6 +9,7 @@ Built and integrated pd_check_legality()
  relative order preserved, 
  new components correctly named NEW_BUF_X, 
  unique names, no dangling pins, fanout within each cell's limit, FFs are sinks)
+
 ********** 0624 11:48 **********
 Summary: branch-order randomization results
 Testcase	Bug-fixes only	Perturb/restart (reverted)	Order randomization (new)	Δ vs best-of-prior

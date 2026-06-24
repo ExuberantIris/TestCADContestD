@@ -21,7 +21,7 @@ static int ensure_node_capacity(PdDesign *d, char *err, size_t err_sz)
     new_cap = d->cap_nodes ? d->cap_nodes * 2 : 256;
     p = realloc(d->nodes, (size_t)new_cap * sizeof(PdNode));
     if (!p)
-        return fail(err, err_sz, "pd_split_buffer: out of memory (nodes)");
+        return fail(err, err_sz, "pd_mutate: out of memory (nodes)");
     d->nodes = p;
     d->cap_nodes = new_cap;
     return 0;
@@ -90,6 +90,78 @@ int pd_split_buffer(PdDesign *d, int buf_node_id, int new_cell_idx, int *out_new
     new_b_children[0] = new_id;
     b->children = new_b_children;
     b->nchildren = 1;
+
+    d->n_nodes++;
+    if (out_new_node_id)
+        *out_new_node_id = new_id;
+    return 0;
+}
+
+int pd_insert_buffer_on_child(PdDesign *d, int parent_id, int child_id, int new_cell_idx,
+                              int *out_new_node_id, char *err, size_t err_sz)
+{
+    PdNode *p;
+    PdNode *new_node;
+    int new_id;
+    int slot;
+    int i;
+
+    if (!d || parent_id < 0 || parent_id >= d->n_nodes)
+        return fail(err, err_sz, "pd_insert_buffer_on_child: invalid parent id");
+    if (d->nodes[parent_id].kind != PD_NODE_BUF)
+        return fail(err, err_sz, "pd_insert_buffer_on_child: parent is not a buffer");
+    if (child_id < 0 || child_id >= d->n_nodes)
+        return fail(err, err_sz, "pd_insert_buffer_on_child: invalid child id");
+    if (new_cell_idx < 0 || new_cell_idx >= d->n_cells)
+        return fail(err, err_sz, "pd_insert_buffer_on_child: invalid cell index");
+
+    p = &d->nodes[parent_id];
+    slot = -1;
+    for (i = 0; i < p->nchildren; i++) {
+        if (p->children[i] == child_id) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot < 0)
+        return fail(err, err_sz,
+                    "pd_insert_buffer_on_child: child is not directly driven by parent");
+    if (d->nodes[child_id].parent != parent_id)
+        return fail(err, err_sz, "pd_insert_buffer_on_child: parent/child link inconsistent");
+
+    /* Grow d->nodes *before* taking any pointer into it - realloc may move the array. */
+    if (ensure_node_capacity(d, err, err_sz) != 0)
+        return -1;
+
+    /* Allocate the new buffer's single-element children array up front, before mutating
+     * anything, so a failure here leaves the design untouched. */
+    int *new_children = (int *)malloc(sizeof(int));
+    if (!new_children)
+        return fail(err, err_sz, "pd_insert_buffer_on_child: out of memory (children)");
+
+    p = &d->nodes[parent_id]; /* re-fetch: ensure_node_capacity may have realloc'd d->nodes */
+    new_id = d->n_nodes;
+    new_node = &d->nodes[new_id];
+
+    memset(new_node, 0, sizeof(*new_node));
+    new_node->id = new_id;
+    snprintf(new_node->name, PD_MAX_NAME, "NEW_BUF_%d", d->next_new_buf_id++);
+    strncpy(new_node->cell, d->cells[new_cell_idx].name, PD_MAX_NAME - 1);
+    new_node->cell[PD_MAX_NAME - 1] = '\0';
+    new_node->kind = PD_NODE_BUF;
+    new_node->cell_idx = new_cell_idx;
+    new_node->parent = parent_id;
+    new_node->level = d->nodes[child_id].level; /* takes over the child's old position */
+    new_node->children = new_children;
+    new_node->children[0] = child_id;
+    new_node->nchildren = 1;
+
+    /* Splice in: parent's *one* affected slot now points at the new buffer instead of
+     * directly at child_id - every other child (sibling) of parent is left completely
+     * untouched, which is the whole point relative to pd_split_buffer. */
+    p->children[slot] = new_id;
+    d->nodes[child_id].parent = new_id;
+    bump_level_recursive(d, child_id, 1);
 
     d->n_nodes++;
     if (out_new_node_id)
