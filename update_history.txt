@@ -1,3 +1,17 @@
+********** 0624 10:10 **********
+perturbation/restart on leftover idle time
+— testcase1/2/3 converge in 14–100s but get a 555s budget, so most of that time is currently wasted. Once greedy hits a local optimum, randomly kick a handful of branches and rerun; keep whichever result scores higher (same "keep the best" pattern as the dual-seed safety net). 
+
+Testcase	Previous best	New (with restart)	Δ	Restart activity (1st call)
+0	1.001531	0.993167	−0.008	3 rounds, 2 accepted
+1	1.030964	1.033750	+0.003	29 rounds, 18 accepted
+2	1.180906	1.192389	+0.011	79 rounds, 36 accepted
+3	0.961761	0.962028	+0.0003	14 rounds, 8 accepted
+4	1.140082	1.140041	~0	0 rounds (no spare time)
+no significant improvement
+
+
+
 ********** 0624 07:23 **********
 Summary
 1. Rewrote the hot loop in greedy_postlp.cpp: replaced the O(n_paths) full rescan + O(subtree) re-annotation on every single candidate try with closed-form incremental tracking — resizing a buffer shifts its entire subtree's clock latency by the same delta, so each affected path's new slack is computed analytically (sign = whether launch/capture is downstream), with a running multiset for WNS and running sum for TNS. Per-pass authoritative resync bounds any drift to within one pass.

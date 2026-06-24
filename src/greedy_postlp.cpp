@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <random>
 #include <set>
 #include <unordered_map>
 #include <vector>
@@ -304,7 +305,6 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
     }
 
     const Clock::time_point t0 = Clock::now();
-    bool improved = true;
     int passes = 0;
     long long timing_evals = 0;
 
@@ -314,16 +314,12 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
     double tns_hold_total = 0.0;
     double cur_area_total = 0.0;
 
-    while (improved && before_deadline(wall_deadline) &&
-           elapsed_sec(t0) < time_limit_sec) {
-        improved = false;
-        passes++;
-
-        // Resync from the authoritative timing engine once per pass: this bounds any
-        // incremental floating-point drift from the trial/revert cycles below to within a
-        // single pass, and is far cheaper than doing a full rescan per candidate (which is
-        // exactly the cost this rewrite exists to avoid - per-pass cost is O(n_paths), versus
-        // O(n_branches * n_candidates * n_paths) for the old per-candidate rescan).
+    // Resync from the authoritative timing engine: rebuilds setup_slacks/hold_slacks/
+    // tns_*_total/cur_area_total/cur_score from scratch. This bounds any incremental
+    // floating-point drift from the trial/revert cycles below, and is far cheaper than doing a
+    // full rescan per candidate (which is exactly the cost this rewrite exists to avoid -
+    // O(n_paths) here, versus O(n_branches * n_candidates * n_paths) for a per-candidate scan).
+    auto resync = [&]() {
         pd_annotate_clock(d);
         refresh_design_timing(d);
         setup_slacks.clear();
@@ -343,80 +339,205 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
                                      multiset_min_or_zero(hold_slacks), tns_hold_total,
                                      cur_area_total, pb->wns_ss_ori, pb->tns_ss_ori,
                                      pb->wns_ff_ori, pb->tns_ff_ori, pb->area_ori);
+    };
 
-        for (int b = 0; b < n_br && before_deadline(wall_deadline); b++) {
-            const LpBranch &br = pb->branches[static_cast<std::size_t>(b)];
-            if (br.kind != LpBranchKind::ExistingBuf) continue;
+    // Commits branch b to new_cell_idx for real: updates node->cell_idx/cur_ss/cur_ff, applies
+    // the resulting slack/area deltas permanently, and refreshes cur_score. Used both by the
+    // hill-climb below (committing whichever candidate won) and by the perturbation kicks
+    // (committing a random candidate to escape the current local optimum).
+    auto commit_branch = [&](int b, int new_cell_idx) {
+        const LpBranch &br = pb->branches[static_cast<std::size_t>(b)];
+        PdNode *node = &d->nodes[br.child_node];
+        const int orig_cell_idx = node->cell_idx;
+        if (orig_cell_idx == new_cell_idx)
+            return;
 
-            PdNode *node = &d->nodes[br.child_node];
-            if (node->kind != PD_NODE_BUF) continue;
+        const std::vector<AffectedPath> &affected = branch_affected_paths[static_cast<std::size_t>(b)];
+        const double orig_area = d->cells[orig_cell_idx].width * d->cells[orig_cell_idx].height;
+        const PdCell *new_cell = &d->cells[new_cell_idx];
+        const double delta_ss =
+            lp_eval_branch_delay_ss(d, new_cell, br.fanout) - cur_ss[static_cast<std::size_t>(b)];
+        const double delta_ff =
+            lp_eval_branch_delay_ff(d, new_cell, br.fanout) - cur_ff[static_cast<std::size_t>(b)];
+        const double new_area = new_cell->width * new_cell->height;
 
-            const int orig_cell_idx = node->cell_idx;
-            const std::vector<int> &cands = branch_candidates[static_cast<std::size_t>(b)];
-            if (cands.size() <= 1) continue;
+        apply_affected_delta(d, affected, delta_ss, delta_ff, &setup_slacks, &hold_slacks,
+                             &tns_setup_total, &tns_hold_total);
+        cur_area_total += new_area - orig_area;
 
-            const std::vector<AffectedPath> &affected =
-                branch_affected_paths[static_cast<std::size_t>(b)];
-            const double orig_area =
-                d->cells[orig_cell_idx].width * d->cells[orig_cell_idx].height;
+        apply_cell_to_branch(d, br, new_cell_idx, &cur_ss, &cur_ff, b);
+        // 確定要套用了，才花時間拷貝字串
+        std::strncpy(node->cell, new_cell->name, PD_MAX_NAME - 1);
+        node->cell[PD_MAX_NAME - 1] = '\0';
 
-            double best_delta = 0.0;
-            int best_cell_idx = orig_cell_idx;
+        cur_score = lp_compute_score(multiset_min_or_zero(setup_slacks), tns_setup_total,
+                                     multiset_min_or_zero(hold_slacks), tns_hold_total,
+                                     cur_area_total, pb->wns_ss_ori, pb->tns_ss_ori,
+                                     pb->wns_ff_ori, pb->tns_ff_ori, pb->area_ori);
+    };
 
-            for (int ci : cands) {
-                if (ci == orig_cell_idx) continue;
-                if (!before_deadline(wall_deadline)) break;
+    // Single-buffer hill-climb to a local optimum (or until `deadline`/wall_deadline hits).
+    auto converge = [&](const Clock::time_point &deadline) {
+        bool improved = true;
+        while (improved && before_deadline(wall_deadline) && Clock::now() < deadline) {
+            improved = false;
+            passes++;
+            resync();
 
-                const PdCell *cell = &d->cells[ci];
-                const double delta_ss =
-                    lp_eval_branch_delay_ss(d, cell, br.fanout) - cur_ss[static_cast<std::size_t>(b)];
-                const double delta_ff =
-                    lp_eval_branch_delay_ff(d, cell, br.fanout) - cur_ff[static_cast<std::size_t>(b)];
-                const double new_area = cell->width * cell->height;
+            for (int b = 0; b < n_br && before_deadline(wall_deadline); b++) {
+                const LpBranch &br = pb->branches[static_cast<std::size_t>(b)];
+                if (br.kind != LpBranchKind::ExistingBuf) continue;
 
-                apply_affected_delta(d, affected, delta_ss, delta_ff, &setup_slacks, &hold_slacks,
-                                     &tns_setup_total, &tns_hold_total);
-                timing_evals++;
+                PdNode *node = &d->nodes[br.child_node];
+                if (node->kind != PD_NODE_BUF) continue;
 
-                const double cand_area = cur_area_total - orig_area + new_area;
-                const double cand_score = lp_compute_score(
-                    multiset_min_or_zero(setup_slacks), tns_setup_total,
-                    multiset_min_or_zero(hold_slacks), tns_hold_total, cand_area, pb->wns_ss_ori,
-                    pb->tns_ss_ori, pb->wns_ff_ori, pb->tns_ff_ori, pb->area_ori);
-                const double delta = cand_score - cur_score;
-                if (delta > best_delta + 1e-12) {
-                    best_delta = delta;
-                    best_cell_idx = ci;
+                const int orig_cell_idx = node->cell_idx;
+                const std::vector<int> &cands = branch_candidates[static_cast<std::size_t>(b)];
+                if (cands.size() <= 1) continue;
+
+                const std::vector<AffectedPath> &affected =
+                    branch_affected_paths[static_cast<std::size_t>(b)];
+                const double orig_area =
+                    d->cells[orig_cell_idx].width * d->cells[orig_cell_idx].height;
+
+                double best_delta = 0.0;
+                int best_cell_idx = orig_cell_idx;
+
+                for (int ci : cands) {
+                    if (ci == orig_cell_idx) continue;
+                    if (!before_deadline(wall_deadline)) break;
+
+                    const PdCell *cell = &d->cells[ci];
+                    const double delta_ss = lp_eval_branch_delay_ss(d, cell, br.fanout) -
+                                            cur_ss[static_cast<std::size_t>(b)];
+                    const double delta_ff = lp_eval_branch_delay_ff(d, cell, br.fanout) -
+                                            cur_ff[static_cast<std::size_t>(b)];
+                    const double new_area = cell->width * cell->height;
+
+                    apply_affected_delta(d, affected, delta_ss, delta_ff, &setup_slacks,
+                                         &hold_slacks, &tns_setup_total, &tns_hold_total);
+                    timing_evals++;
+
+                    const double cand_area = cur_area_total - orig_area + new_area;
+                    const double cand_score = lp_compute_score(
+                        multiset_min_or_zero(setup_slacks), tns_setup_total,
+                        multiset_min_or_zero(hold_slacks), tns_hold_total, cand_area,
+                        pb->wns_ss_ori, pb->tns_ss_ori, pb->wns_ff_ori, pb->tns_ff_ori,
+                        pb->area_ori);
+                    const double delta = cand_score - cur_score;
+                    if (delta > best_delta + 1e-12) {
+                        best_delta = delta;
+                        best_cell_idx = ci;
+                    }
+
+                    // Undo the trial - restores setup_slacks/hold_slacks/tns_*_total exactly,
+                    // so the next candidate is evaluated against the same unmodified baseline.
+                    apply_affected_delta(d, affected, -delta_ss, -delta_ff, &setup_slacks,
+                                         &hold_slacks, &tns_setup_total, &tns_hold_total);
                 }
 
-                // Undo the trial - restores setup_slacks/hold_slacks/tns_*_total exactly, so
-                // the next candidate is evaluated against the same unmodified baseline.
-                apply_affected_delta(d, affected, -delta_ss, -delta_ff, &setup_slacks, &hold_slacks,
-                                     &tns_setup_total, &tns_hold_total);
+                if (best_delta > 1e-12) {
+                    commit_branch(b, best_cell_idx);
+                    improved = true;
+                }
+            }
+        }
+    };
+
+    const Clock::time_point initial_deadline =
+        t0 + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(time_limit_sec));
+    converge(initial_deadline);
+
+    // --- Perturbation / restart phase -------------------------------------------------------
+    // Coordinate-descent hill-climbing gets stuck at whatever local optimum the branch
+    // processing order leads to. On small/medium testcases this converges in seconds out of a
+    // 555s budget, leaving the rest idle. Spend up to half of whatever's left after initial
+    // convergence on random-kick restarts (iterated local search): perturb a handful of
+    // branches to a random candidate, re-converge, and keep the result only if it's actually
+    // better than the best found so far - this can never make the result worse, only use idle
+    // time productively. The other half is deliberately left unused so main.cpp's dual-seed
+    // safety net (trying the plain original design as an alternate starting point) still gets
+    // a chance to run afterward.
+    struct Snapshot {
+        std::vector<int> cell_idx;
+        double score = -1e30;
+    };
+    auto take_snapshot = [&]() {
+        Snapshot s;
+        s.cell_idx.assign(static_cast<std::size_t>(n_br), -1);
+        for (int b = 0; b < n_br; b++) {
+            const LpBranch &br = pb->branches[static_cast<std::size_t>(b)];
+            if (br.kind == LpBranchKind::ExistingBuf)
+                s.cell_idx[static_cast<std::size_t>(b)] = d->nodes[br.child_node].cell_idx;
+        }
+        s.score = cur_score;
+        return s;
+    };
+    auto restore_snapshot = [&](const Snapshot &s) {
+        for (int b = 0; b < n_br; b++) {
+            const int ci = s.cell_idx[static_cast<std::size_t>(b)];
+            if (ci < 0) continue;
+            const LpBranch &br = pb->branches[static_cast<std::size_t>(b)];
+            PdNode *node = &d->nodes[br.child_node];
+            node->cell_idx = ci;
+            std::strncpy(node->cell, d->cells[ci].name, PD_MAX_NAME - 1);
+            node->cell[PD_MAX_NAME - 1] = '\0';
+            cur_ss[static_cast<std::size_t>(b)] = lp_eval_branch_delay_ss(d, &d->cells[ci], br.fanout);
+            cur_ff[static_cast<std::size_t>(b)] = lp_eval_branch_delay_ff(d, &d->cells[ci], br.fanout);
+        }
+        resync();
+    };
+
+    Snapshot best = take_snapshot();
+
+    std::vector<int> perturbable;
+    for (int b = 0; b < n_br; b++) {
+        const LpBranch &br = pb->branches[static_cast<std::size_t>(b)];
+        if (br.kind == LpBranchKind::ExistingBuf && branch_candidates[static_cast<std::size_t>(b)].size() > 1)
+            perturbable.push_back(b);
+    }
+
+    const double remain_call_budget = time_limit_sec - elapsed_sec(t0);
+    const double remain_wall = std::chrono::duration<double>(wall_deadline - Clock::now()).count();
+    const double perturb_budget = 0.5 * std::max(0.0, std::min(remain_call_budget, remain_wall));
+    const Clock::time_point perturb_deadline =
+        Clock::now() + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(perturb_budget));
+
+    // Give up after this many consecutive rejected rounds: on a tiny/already-optimal design
+    // (e.g. a trivial smoke-test case) every kick gets rejected forever, and without a patience
+    // limit the loop just burns the whole time budget achieving nothing (observed: 160M+ rounds
+    // on a 4-buffer test design). 500 is generous relative to kmax<=20 candidate/branch
+    // combinations - if nothing better turns up in 500 tries, more tries are not going to help.
+    constexpr int kPatience = 500;
+    int restart_rounds = 0;
+    int restart_accepted = 0;
+    if (!perturbable.empty() && perturb_budget > 0.5) {
+        std::mt19937 rng(0xC0FFEEu);
+        std::uniform_int_distribution<std::size_t> pick_branch(0, perturbable.size() - 1);
+        const int kmax = std::max(1, std::min(20, static_cast<int>(perturbable.size() / 20) + 1));
+        std::uniform_int_distribution<int> pick_kicks(1, kmax);
+
+        int rounds_since_improvement = 0;
+        while (before_deadline(wall_deadline) && Clock::now() < perturb_deadline &&
+               rounds_since_improvement < kPatience) {
+            restart_rounds++;
+            const int kicks = pick_kicks(rng);
+            for (int k = 0; k < kicks; k++) {
+                const int b = perturbable[pick_branch(rng)];
+                const std::vector<int> &cands = branch_candidates[static_cast<std::size_t>(b)];
+                std::uniform_int_distribution<std::size_t> pick_cell(0, cands.size() - 1);
+                commit_branch(b, cands[pick_cell(rng)]);
             }
 
-            if (best_delta > 1e-12) {
-                const PdCell *best_cell = &d->cells[best_cell_idx];
-                const double delta_ss = lp_eval_branch_delay_ss(d, best_cell, br.fanout) -
-                                        cur_ss[static_cast<std::size_t>(b)];
-                const double delta_ff = lp_eval_branch_delay_ff(d, best_cell, br.fanout) -
-                                        cur_ff[static_cast<std::size_t>(b)];
-                const double new_area = best_cell->width * best_cell->height;
+            converge(perturb_deadline);
 
-                apply_affected_delta(d, affected, delta_ss, delta_ff, &setup_slacks, &hold_slacks,
-                                     &tns_setup_total, &tns_hold_total);
-                cur_area_total += new_area - orig_area;
-
-                apply_cell_to_branch(d, br, best_cell_idx, &cur_ss, &cur_ff, b);
-                // 確定要套用了，才花時間拷貝字串
-                std::strncpy(node->cell, best_cell->name, PD_MAX_NAME - 1);
-                node->cell[PD_MAX_NAME - 1] = '\0';
-
-                cur_score = lp_compute_score(multiset_min_or_zero(setup_slacks), tns_setup_total,
-                                             multiset_min_or_zero(hold_slacks), tns_hold_total,
-                                             cur_area_total, pb->wns_ss_ori, pb->tns_ss_ori,
-                                             pb->wns_ff_ori, pb->tns_ff_ori, pb->area_ori);
-                improved = true;
+            if (cur_score > best.score + 1e-9) {
+                best = take_snapshot();
+                restart_accepted++;
+                rounds_since_improvement = 0;
+            } else {
+                restore_snapshot(best);
+                rounds_since_improvement++;
             }
         }
     }
@@ -425,8 +546,9 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
     refresh_design_timing(d);
     cur_score = score_design(pb, d);
 
-    std::printf("greedy_post_lp: finished after %d passes, %lld timing evals, %.1fs\n", passes,
-                timing_evals, elapsed_sec(t0));
+    std::printf(
+        "greedy_post_lp: finished after %d passes, %lld timing evals, %.1fs (restart rounds=%d accepted=%d)\n",
+        passes, timing_evals, elapsed_sec(t0), restart_rounds, restart_accepted);
 
     lp_init->d_ss = cur_ss;
     lp_init->d_ff = cur_ff;

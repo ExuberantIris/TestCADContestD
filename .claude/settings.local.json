@@ -47,7 +47,15 @@
       "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && g++ -std=c++17 -Wall -Wextra -O2 -Iinclude -c -o src/lp_branch.o src/lp_branch.cpp 2>&1 && g++ -std=c++17 -Wall -Wextra -O2 -Iinclude -c -o src/greedy_postlp.o src/greedy_postlp.cpp 2>&1 && make build 2>&1 | tail -10\")",
       "Bash(wsl.exe -e bash -lc 'cd '\\\\''/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD'\\\\'' && SC='\\\\''/mnt/c/Users/leewe/AppData/Local/Temp/claude/c--Users-leewe-OneDrive-------------114-2-eda---TestCADContestD/b17bd114-f8fb-4218-a80b-08a7db0dec2b/scratchpad/check_fanout.py'\\\\'' && python3 \"$SC\" testcase/testcase0/buf.lib '\\\\''/mnt/c/Users/leewe/AppData/Local/Temp/claude/c--Users-leewe-OneDrive-------------114-2-eda---TestCADContestD/b17bd114-f8fb-4218-a80b-08a7db0dec2b/scratchpad/old_struct0.txt'\\\\''')",
       "Bash(wsl.exe -e bash -lc 'cd '\\\\''/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD'\\\\'' && SC='\\\\''/mnt/c/Users/leewe/AppData/Local/Temp/claude/c--Users-leewe-OneDrive-------------114-2-eda---TestCADContestD/b17bd114-f8fb-4218-a80b-08a7db0dec2b/scratchpad/check_fanout.py'\\\\'' *)",
-      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && awk '/Running testcase1 ->/,/Running testcase2/' /tmp/run_all_v4.log\")"
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && awk '/Running testcase1 ->/,/Running testcase2/' /tmp/run_all_v4.log\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make build 2>&1 | tail -3 && rm -rf /tmp/restart2 && mkdir -p /tmp/restart2 && timeout 60 env GREEDY_TIME_LIMIT=40 ./sa_solver testcase/testcase2 /tmp/restart2 2>&1\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && rm -rf /tmp/restart2b && mkdir -p /tmp/restart2b && timeout 90 env SA_TIME_LIMIT=60 ./sa_solver testcase/testcase2 /tmp/restart2b 2>&1\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make run-all 2>&1 | tee /tmp/run_all_v5.log\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && awk '/Running testcase0 ->/,/Running testcase1/' /tmp/run_all_v5.log\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make build 2>&1 | tail -3\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && mkdir -p /tmp/tc0_a && ./sa_solver testcase/testcase0 /tmp/tc0_a 2>&1 | grep -E 'lp_solve_mo_init|finished after|Second greedy result|Score'\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make run-all 2>&1 | tee /tmp/run_all_v6.log\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && cat result_summary.csv && echo '---' && grep wall_elapsed_sec result/testcase_basic/result.txt\")"
     ]
   }
 }
