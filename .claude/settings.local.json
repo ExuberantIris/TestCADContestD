@@ -139,7 +139,14 @@
       "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && make build 2>&1 | tail -10')",
       "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && make run-all 2>&1 | tee /tmp/run_all_log2.txt')",
       "Bash(wsl.exe -e bash -lc 'grep -iE \"LEGALITY CHECK FAILED|wall_elapsed_sec\" /tmp/run_all_log2.txt; echo ---; for tc in testcase0 testcase1 testcase2 testcase3 testcase4; do grep -H \"wall_elapsed_sec\" \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD/result/$tc/result.txt\"; done')",
-      "Bash(wsl.exe -e bash -lc 'grep -ciE \"error|fail\" /tmp/run_all_log2.txt; grep -c \"^Wrote\" /tmp/run_all_log2.txt; grep \"Removed.*decoupling\" /tmp/run_all_log2.txt')"
+      "Bash(wsl.exe -e bash -lc 'grep -ciE \"error|fail\" /tmp/run_all_log2.txt; grep -c \"^Wrote\" /tmp/run_all_log2.txt; grep \"Removed.*decoupling\" /tmp/run_all_log2.txt')",
+      "Bash(wsl.exe -e bash -lc 'grep -E \"Pre-inserted|Removed.*decoupling|Score \\\\\\(a=0.6\" /tmp/run_all_log2.txt')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && cat src/main.cpp | grep -n \"insert_select\" )",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && make test_insert_select 2>&1 | tail -40')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && ./test_insert_select')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && make build 2>&1 | tail -15 && for t in test_pd_mutate test_pd_checker test_pd_insert_on_child test_pd_remove_buffer test_insert_select; do echo \"== $t ==\"; ./$t | tail -2; done')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && make run-all 2>&1 | tee /tmp/run_all_log3_optionA.txt')",
+      "Bash(wsl.exe -e bash -lc 'grep -iE \"LEGALITY CHECK FAILED\" /tmp/run_all_log3_optionA.txt; echo \"---rc=$?---\"; grep -E \"Pre-inserted|Removed.*decoupling|wall_elapsed\" /tmp/run_all_log3_optionA.txt')"
     ]
   }
 }

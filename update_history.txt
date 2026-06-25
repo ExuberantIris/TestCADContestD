@@ -1,3 +1,22 @@
+********** 0625 02:24 **********
+尋找 insertion candidate 的條件：不只是看 FF 正上方是否 branch>1 而是可以繼續往上找到真正分岔位置做 insertion
+Testcase	Candidates (old→new)	Removed via zero-cell (old→new)	Survived (old→new)
+testcase0	18597 → 19679 (+5.8%)	15968 → 16908	2629 → 2771
+testcase1	4309 → 4573 (+6.1%)	3723 → 3938	586 → 635
+testcase2	2257 → 2384 (+5.6%)	1898 → 2036	359 → 348
+testcase3	7170 → 7568 (+5.6%)	6112 → 6395	1058 → 1173
+testcase4	29175 → 30783 (+5.5%)	25251 → 26546	3924 → 4237
+
+Testcase	Old score	New score	Δ
+testcase0	1.180826	1.177427	−0.003399
+testcase1	1.122668	1.123847	+0.001179
+testcase2	1.382480	1.385190	+0.002710
+testcase3	1.133733	1.131155	−0.002578
+testcase4	1.264919	1.267541	+0.002622
+Total	6.084626	6.085160	+0.000534
+
+微小進步
+
 ********** 0625 12:36 **********
 最後時間改成保留 15 秒
 Total score: 6.084626 vs. prior best 6.090574 — a −0.00595 cost (0.1%), exactly the expected price for trading ~10 seconds of guest-clock budget for the larger safety margin.

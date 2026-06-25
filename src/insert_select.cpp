@@ -4,6 +4,22 @@
 #include <set>
 #include <utility>
 
+bool pd_find_branch_point(const PdDesign *d, int ff_id, int *out_ancestor, int *out_child)
+{
+    int child = ff_id;
+    int cur = d->nodes[ff_id].parent;
+    while (cur >= 0 && d->nodes[cur].kind == PD_NODE_BUF) {
+        if (d->nodes[cur].nchildren > 1) {
+            *out_ancestor = cur;
+            *out_child = child;
+            return true;
+        }
+        child = cur;
+        cur = d->nodes[cur].parent;
+    }
+    return false;
+}
+
 int insert_decoupling_buffers(PdDesign *d, char *err, std::size_t err_sz)
 {
     if (!d) {
@@ -12,8 +28,8 @@ int insert_decoupling_buffers(PdDesign *d, char *err, std::size_t err_sz)
         return -1;
     }
 
-    // (parent_id, ff_id) edges where a violating path's launch/capture FF is a direct child of
-    // a buffer it shares with siblings. std::set both dedupes and gives deterministic order.
+    // (ancestor, child) edges at the nearest true branch point above each violating path's
+    // launch/capture FF. std::set both dedupes and gives deterministic order.
     std::set<std::pair<int, int>> candidates;
     for (int p = 0; p < d->n_paths; p++) {
         const PdPath &path = d->paths[p];
@@ -24,11 +40,9 @@ int insert_decoupling_buffers(PdDesign *d, char *err, std::size_t err_sz)
 
         const int ff_ids[2] = {path.launch_id, path.capture_id};
         for (int ff_id : ff_ids) {
-            const int parent_id = d->nodes[ff_id].parent;
-            if (parent_id < 0)
-                continue;
-            if (d->nodes[parent_id].kind == PD_NODE_BUF && d->nodes[parent_id].nchildren > 1)
-                candidates.insert({parent_id, ff_id});
+            int ancestor, child;
+            if (pd_find_branch_point(d, ff_id, &ancestor, &child))
+                candidates.insert({ancestor, child});
         }
     }
 

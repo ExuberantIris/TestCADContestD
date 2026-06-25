@@ -48,11 +48,14 @@ INSERT_TEST_OBJS = $(INSERT_TEST_SRCS:.cpp=.o)
 REMOVE_TEST_SRCS = unittest/test_pd_remove_buffer.cpp
 REMOVE_TEST_OBJS = $(REMOVE_TEST_SRCS:.cpp=.o)
 
+INSERT_SELECT_TEST_SRCS = unittest/test_insert_select.cpp
+INSERT_SELECT_TEST_OBJS = $(INSERT_SELECT_TEST_SRCS:.cpp=.o)
+
 PRINT_LP_SRCS = tools/print_lp_input.cpp src/lp_print_input.cpp
 PRINT_LP_OBJS = tools/print_lp_input.o src/lp_print_input.o
 
 # 將 report 加入 PHONY 清單
-.PHONY: all build run run-all clean unittest test_pd_mutate test_pd_checker test_pd_insert_on_child test_pd_remove_buffer print_lp_input report
+.PHONY: all build run run-all clean unittest test_pd_mutate test_pd_checker test_pd_insert_on_child test_pd_remove_buffer test_insert_select print_lp_input report
 
 all: run
 
@@ -126,6 +129,9 @@ test_pd_insert_on_child: $(PD_OBJS) $(INSERT_TEST_OBJS)
 test_pd_remove_buffer: $(PD_OBJS) $(REMOVE_TEST_OBJS)
 	$(CXX) $(CXXFLAGS) -o test_pd_remove_buffer $(PD_OBJS) $(REMOVE_TEST_OBJS) $(LDFLAGS)
 
+test_insert_select: $(PD_OBJS) $(INSERT_SELECT_TEST_OBJS) src/insert_select.o
+	$(CXX) $(CXXFLAGS) -o test_insert_select $(PD_OBJS) $(INSERT_SELECT_TEST_OBJS) src/insert_select.o $(LDFLAGS)
+
 $(PD_DIR)/src/%.lp.o: $(PD_DIR)/src/%.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
@@ -139,4 +145,4 @@ unittest/%.o: unittest/%.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(PD_OBJS) $(SA_OBJS) $(UNITTEST_OBJS) $(MUTATE_TEST_OBJS) $(CHECKER_TEST_OBJS) $(INSERT_TEST_OBJS) $(REMOVE_TEST_OBJS) $(PRINT_LP_OBJS) sa_solver test_buffer_chain_dp test_pd_mutate test_pd_checker test_pd_insert_on_child test_pd_remove_buffer print_lp_input
+	rm -f $(PD_OBJS) $(SA_OBJS) $(UNITTEST_OBJS) $(MUTATE_TEST_OBJS) $(CHECKER_TEST_OBJS) $(INSERT_TEST_OBJS) $(REMOVE_TEST_OBJS) $(INSERT_SELECT_TEST_OBJS) $(PRINT_LP_OBJS) sa_solver test_buffer_chain_dp test_pd_mutate test_pd_checker test_pd_insert_on_child test_pd_remove_buffer test_insert_select print_lp_input
