@@ -112,7 +112,30 @@
       "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && head -5 testcase/testcase0/clk_tree.structure')",
       "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && for tc in testcase0 testcase1 testcase2 testcase3 testcase4; do *)",
       "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && head -2 result/testcase0/modified_clk_tree.structure; echo ---; grep -c \"ROOT_CLK\" testcase/testcase0/clk_tree.structure result/testcase0/modified_clk_tree.structure')",
-      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && file testcase/testcase0/clk_tree.structure result/testcase0/modified_clk_tree.structure')"
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && file testcase/testcase0/clk_tree.structure result/testcase0/modified_clk_tree.structure')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && cat result/testcase0/result.txt | head -25')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && mkdir -p /tmp/timing_test && time \\(GREEDY_TIME_LIMIT=555 ./sa_solver \"testcase/testcase4\" \"/tmp/timing_test/testcase4\"\\) 2>&1 | tail -30')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && cat /tmp/timing_test/testcase4/result.txt | head -12')",
+      "Bash(wsl.exe -e bash -lc 'wc -l \"/tmp/timing_test/testcase4/modified_clk_tree.structure\" \"/tmp/timing_test/testcase4/result.txt\"; ls -la /tmp/timing_test/testcase4/')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && make build 2>&1 | tail -20')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && rm -rf /tmp/timing_test2 && mkdir -p /tmp/timing_test2 && time \\(GREEDY_TIME_LIMIT=555 ./sa_solver \"testcase/testcase4\" \"/tmp/timing_test2/testcase4\"\\) 2>&1 | tail -40')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && time ./sa_solver 2>&1')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && rm -rf /tmp/timing_small && mkdir -p /tmp/timing_small && time \\(GREEDY_TIME_LIMIT=20 LP_INIT_TIME_LIMIT=3 SA_TIME_LIMIT=30 ./sa_solver \"testcase/testcase2\" \"/tmp/timing_small\"\\) 2>&1 | tail -25')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && make clean >/dev/null 2>&1 && make build test_pd_mutate test_pd_checker test_pd_insert_on_child test_pd_remove_buffer 2>&1 | grep -iE \"error\" ; echo \"build done\"')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && for t in test_pd_mutate test_pd_checker test_pd_insert_on_child test_pd_remove_buffer; do echo \"== $t ==\"; ./$t | tail -3; done')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && make test_pd_remove_buffer 2>&1 | tail -10 && ./test_pd_remove_buffer | tail -15')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && rm -rf /tmp/timing_test3 && mkdir -p /tmp/timing_test3 && time \\(GREEDY_TIME_LIMIT=555 ./sa_solver \"testcase/testcase4\" \"/tmp/timing_test3/testcase4\"\\) 2>&1 | tail -25')",
+      "Bash(wsl.exe -e bash -lc \"ps aux | grep -i sa_solver | grep -v grep\")",
+      "Bash(wsl.exe -e bash -lc \"ps aux --sort=-%cpu | head -15\")",
+      "Bash(wsl.exe -e bash -lc \"ps aux | grep -iE 'sa_solver|wsl' | grep -v grep; uptime\")",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && rm -rf /tmp/timing_test4 && mkdir -p /tmp/timing_test4 && { time GREEDY_TIME_LIMIT=555 ./sa_solver \"testcase/testcase4\" \"/tmp/timing_test4/testcase4\" > /tmp/timing_test4/log.txt 2>&1 ; } 2> /tmp/timing_test4/time.txt; cat /tmp/timing_test4/time.txt')",
+      "Bash(wsl.exe -e bash -lc 'cat /tmp/timing_test4/time.txt; echo \"---LOG TAIL---\"; tail -20 /tmp/timing_test4/log.txt')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && make build 2>&1 | tail -10 && for t in test_pd_mutate test_pd_checker test_pd_insert_on_child test_pd_remove_buffer; do echo \"== $t ==\"; ./$t | tail -2; done')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && git status --short && echo \"---DIFF STAT---\" && git diff --stat')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && git log --oneline -8 && echo \"---\" && git show --stat HEAD | head -30')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && git show --stat HEAD | grep -E \"^ \\(src|include|unittest|Makefile\\)\" ')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && git diff src/pd_mutate.c')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && git diff unittest/test_pd_remove_buffer.cpp')"
     ]
   }
 }

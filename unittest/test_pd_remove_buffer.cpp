@@ -39,6 +39,18 @@ int find_buffer_with_children(const PdDesign &d, int min_children)
     return -1;
 }
 
+/** First buffer node with exactly one direct child - the zero cell's max_fanout is 1 (it's
+ *  never evaluated at any other fanout, see pd_add_zero_cell), so assigning it to a
+ *  multi-child buffer would trip the max_fanout check before ever reaching the zero-cell-leak
+ *  check this test wants to exercise in isolation. */
+int find_buffer_with_exactly_one_child(const PdDesign &d)
+{
+    for (int i = 0; i < d.n_nodes; i++)
+        if (d.nodes[i].kind == PD_NODE_BUF && d.nodes[i].nchildren == 1)
+            return i;
+    return -1;
+}
+
 int g_pass = 0;
 int g_fail = 0;
 
@@ -172,12 +184,15 @@ int main(int argc, char **argv)
     }
 
     // --- Step 5: an *existing* buffer carrying the zero cell must never be silently allowed -
+    // (single-child victim: the zero cell's max_fanout is 1, so a multi-child buffer would be
+    // rejected for exceeding max_fanout before ever reaching the zero-cell-leak check - using a
+    // single-child buffer isolates the check this step actually wants to exercise.)
     {
         PdDesign d2{};
         if (pd_load_design(testcase_dir.c_str(), &d2, err, sizeof(err)) == 0) {
             int zci = -1;
-            if (pd_add_zero_cell(&d2, &zci, err, sizeof(err)) == 0) {
-                const int victim = find_buffer_with_children(d2, 1);
+            const int victim = find_buffer_with_exactly_one_child(d2);
+            if (victim >= 0 && pd_add_zero_cell(&d2, &zci, err, sizeof(err)) == 0) {
                 d2.nodes[victim].cell_idx = zci;
                 char e[512] = {0};
                 const int rc = pd_check_legality(&d2, &d2, e, sizeof(e));
@@ -187,6 +202,8 @@ int main(int argc, char **argv)
                 check(rejected,
                      "an existing (non-NEW_BUF_*) buffer assigned the zero cell is rejected, "
                      "never silently deleted");
+            } else if (victim < 0) {
+                std::cout << "  [SKIP] no single-child buffer found to exercise this case\n";
             }
             pd_free_design(&d2);
         }

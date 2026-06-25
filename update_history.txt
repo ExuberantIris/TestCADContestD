@@ -1,3 +1,8 @@
+********** 0625 09:34 **********
+計時稽核期間發現並修的小問題
+pd_mutate.c：pd_add_zero_cell 裡 zero cell 的 max_fanout 從 PD_MAX_FANOUT_TBL(32) 改成 1。原因：NEW_BUF_* 一定是單一 child（fanout 永遠是 1），設成 32 沒有任何功能意義，只會讓 LpBufferChainDp 的表格多算 27 個完全用不到的 row。這是計時調查時順手發現並修正的，雖然事後證實不是那 56-61 秒落差的真正原因，但本身是個正確、值得保留的修正。
+test_pd_remove_buffer.cpp：因為上面那個改動，原本測試用「隨便一顆有 child 的 buffer」去驗證「不可被靜默刪除」，現在會先撞到 max_fanout 檢查而不是 zero-cell 檢查——改成專門找一顆剛好只有 1 個 child 的 buffer 來測，才能精準驗證 zero-cell-leak 這條檢查本身。
+
 ********** 0625 02:38 **********
 Per-testcase breakdown vs. the last insertion attempt (5.285731 total):
 

@@ -232,7 +232,13 @@ int pd_add_zero_cell(PdDesign *d, int *out_cell_idx, char *err, size_t err_sz)
     snprintf(c->name, PD_MAX_NAME, "__ZERO_CELL__");
     c->width = 0.0;
     c->height = 0.0;
-    c->max_fanout = PD_MAX_FANOUT_TBL;
+    /* Every NEW_BUF_* node is single-child by construction (pd_insert_buffer_on_child always
+     * creates one), so its branch's fanout is always exactly 1 - this cell is never evaluated
+     * at any other fanout. Advertising a larger max_fanout here would needlessly inflate
+     * LpBufferChainDp::build()'s row count (it sizes its table by max-over-all-cells max_fanout
+     * and would otherwise populate ~27 extra all-zero rows of up to ~5000 entries each, purely
+     * wasted work for a table nothing reads after Phase 0). */
+    c->max_fanout = 1;
     for (i = 0; i < PD_MAX_FANOUT_TBL; i++) {
         c->ss_delay[i] = 0.0;
         c->ff_delay[i] = 0.0;
