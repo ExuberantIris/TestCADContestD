@@ -1,3 +1,16 @@
+********** 0625 20:18 **********
+attempt 1: 按照權重排序
+剩餘 attempt: 按照權重 random
+Testcase	Before (weighted-random attempt 1)	After (deterministic attempt 1 + random shuffle)	Δ
+testcase0	1.181409	1.190588	+0.009179
+testcase1	1.124108	1.124108	0 (identical)
+testcase2	1.385881	1.385881	0 (identical)
+testcase3	1.134224	1.134224	0 (identical)
+testcase4	1.276052	1.278194	+0.002142
+Total	6.101674	6.112995	+0.0113
+較大的 testcase 0、4 有改善，因為做的 iteration 次數少。 Deterministic order 是一個相對有邏輯、比瞎猜還有依據的選擇。
+testcase 1、2、3 有時間做多次 iteration，可以靠著 random 找到意外的最佳解
+
 ********** 0625 17:24 **********
 weighting attempt 1 too: iteration 1 就打亂順序
 

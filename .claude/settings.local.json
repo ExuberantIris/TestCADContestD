@@ -154,7 +154,20 @@
       "Bash(wsl.exe -e bash -lc 'grep -iE \"LEGALITY CHECK FAILED\" /tmp/run_all_log4_weighted.txt; echo \"rc=$?\"')",
       "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && for t in test_pd_mutate test_pd_checker test_pd_insert_on_child test_pd_remove_buffer test_insert_select; do echo \"== $t ==\"; ./$t | tail -2; done && ./test_buffer_chain_dp 2>&1 | tail -8')",
       "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && make run-all 2>&1 | tee /tmp/run_all_log5_weighted_attempt1.txt')",
-      "Bash(wsl.exe -e bash -lc 'grep -iE \"LEGALITY CHECK FAILED\" /tmp/run_all_log5_weighted_attempt1.txt; echo \"rc=$?\"')"
+      "Bash(wsl.exe -e bash -lc 'grep -iE \"LEGALITY CHECK FAILED\" /tmp/run_all_log5_weighted_attempt1.txt; echo \"rc=$?\"')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && mkdir -p result_det_test')",
+      "Bash(wsl.exe -e bash -lc 'bash \"/c/Users/leewe/AppData/Local/Temp/claude/c--Users-leewe-OneDrive-------------114-2-eda---TestCADContestD/079d0dae-4ab0-4768-93d4-3aa5e5dd423a/scratchpad/run_det_test.sh\" 2>&1 | tee /tmp/det_test_log.txt')",
+      "Bash(cat \"/c/Users/leewe/AppData/Local/Temp/claude/c--Users-leewe-OneDrive-------------114-2-eda---TestCADContestD/079d0dae-4ab0-4768-93d4-3aa5e5dd423a/tasks/ba32ln1fw.output\")",
+      "Read(//c/Users/leewe/AppData/Local/Temp/claude/c--Users-leewe-OneDrive-------------114-2-eda---TestCADContestD/079d0dae-4ab0-4768-93d4-3aa5e5dd423a/tasks/**)",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && export GREEDY_DETERMINISTIC_ORDER=1 && for tc in testcase1 testcase2 testcase3; do mkdir -p \"result_det_test/$tc\"; echo \"==> $tc \\(quick budget 200s\\)\"; GREEDY_TIME_LIMIT=200 ./sa_solver \"testcase/$tc\" \"result_det_test/$tc\" > \"result_det_test/$tc.log\" 2>&1; grep \"Score \\(a=0.6\" \"result_det_test/$tc/result.txt\" | tail -1; done; for tc in testcase0 testcase4; do mkdir -p \"result_det_test/$tc\"; echo \"==> $tc \\(full budget 555s\\)\"; GREEDY_TIME_LIMIT=555 ./sa_solver \"testcase/$tc\" \"result_det_test/$tc\" > \"result_det_test/$tc.log\" 2>&1; grep \"Score \\(a=0.6\" \"result_det_test/$tc/result.txt\" | tail -1; done; echo \"=== ALL DONE ===\"')",
+      "Bash(tee /tmp/det_test_log2.txt)",
+      "Bash(cat /tmp/det_test_log2.txt)",
+      "Read(//tmp/**)",
+      "Bash(cd \"/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\")",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && grep -n \"std::getenv\\\\|std::atoi\\\\|std::strtol\\\\|std::malloc\\\\|std::exit\" src/greedy_postlp.cpp')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && make run-all 2>&1 | tee /tmp/run_all_log6_hybrid.txt')",
+      "Bash(wsl.exe -e bash -lc 'grep -iE \"LEGALITY CHECK FAILED\" /tmp/run_all_log6_hybrid.txt; echo \"rc=$?\"')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && rm -rf result_det_test && git status --short | head -20')"
     ]
   }
 }
