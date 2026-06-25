@@ -612,7 +612,7 @@ Greedy 是 hill-climbing，從「更好的起點」不保證收斂到「更好�
 ================================================================================
 第七部分　Phase 3 — 套用最終解、清理、輸出
 ================================================================================
-→ src/sa_apply.cpp, src/pd_mutate.c, src/pd_checker.c, src/pd_output.c
+→ src/apply_solution.cpp, src/pd_mutate.c, src/pd_checker.c, src/pd_output.c
 
 7.1　套用最終解
 --------------------------------------------------------------------------------
@@ -811,7 +811,8 @@ capture_paths（O(1) 平均查詢），不用掃描任何一條跟這個節點�
   lp_build_from_design / add_branch / lp_cell_delay_bounds src/lp_branch.cpp
   lp_solve_mo_init（樹形差分限制 + SPFA 二分搜尋）         src/lp_mo_init.cpp
   greedy_post_lp（commit / pass / attempt 三層結構）       src/greedy_postlp.cpp
-  sa_apply_solution（把最終解套回真實 cell）               src/sa_apply.cpp
+  apply_solution（把最終解套回真實 cell）                  src/apply_solution.cpp
+  lp_eval_build_ctx / lp_eval_state（評估候選解的 timing） src/lp_eval.cpp
   lp_compute_score / lp_compute_metrics                   src/lp_score.cpp
   main()（整條 pipeline 的總指揮）                          src/main.cpp
 

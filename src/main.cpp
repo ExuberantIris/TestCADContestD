@@ -3,11 +3,9 @@
 #include "lp_mo_init.hpp"
 #include "lp_score.hpp"
 #include "lp_types.hpp"
-#include "sa_apply.hpp"
-#include "sa_eval.hpp"
-// #include "sa_path_solve.hpp" // ✂️ 移除 SA 標頭檔
+#include "apply_solution.hpp"
+#include "lp_eval.hpp"
 #include "greedy_postlp.hpp"
-#include "sa_solve.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -63,13 +61,25 @@ static double read_greedy_time_limit()
     return 540.0; /* 9 min */
 }
 
+// Bundles the winning LpSolution plus the timing/iteration stats Phase 3 needs for the
+// result.txt report - just a data carrier between Phase 2 (Greedy) and Phase 3 (Apply & Output).
+struct SolverResult {
+    LpSolution solution;
+    double elapsed_sec = 0.0;
+    double lp_init_sec = 0.0;
+    int lp_init_ok = 0;
+    int timed_out = 0;
+    int use_second_best = 0;
+    long long iterations = 0;
+};
+
 int main(int argc, char **argv)
 {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     PdDesign design{};
     PdDesign orig_design{}; // untouched copy of the input, kept for the final legality gate
     LpProblem problem;
-    SaSolveResult sa_result{}; // 保留這個 struct 用來當作資料載體傳給 output
+    SolverResult solver_result{}; // carries the winning solution + stats through to Phase 3
     LpSolution lp_init{};
     LpMetrics ori{}, opt{};
     LpMetrics lp_init_metrics{};
@@ -161,9 +171,9 @@ int main(int argc, char **argv)
         if (pass1_budget > 0.1 &&
             lp_solve_mo_init(&problem, &design, &lp_pass1, pass1_budget, err, sizeof(err)) == 0 &&
             !lp_pass1.d_ss.empty()) {
-            SaPgCtx pass1_ctx;
-            if (sa_build_ctx(&problem, &design, &pass1_ctx)) {
-                sa_eval_state(&problem, &design, lp_pass1.d_ss, lp_pass1.d_ff, &dp_ss, &dp_ff,
+            LpEvalCtx pass1_ctx;
+            if (lp_eval_build_ctx(&problem, &design, &pass1_ctx)) {
+                lp_eval_state(&problem, &design, lp_pass1.d_ss, lp_pass1.d_ff, &dp_ss, &dp_ff,
                              &pass1_ctx);
                 // pb->path_ids is the identity map 0..n_paths-1 (see lp_build_from_design), so
                 // ctx path index p corresponds directly to design.paths[p].
@@ -241,11 +251,11 @@ int main(int argc, char **argv)
     lp_print_metrics("baseline (ori)", &ori);
 
     std::vector<BranchDpOpts> opts;
-    sa_build_branch_opts(&problem, &design, &opts);
-    
-    // 雖然不跑 SA 了，但我們保留 initial 作為沒有解時的 fallback
+    lp_eval_build_branch_opts(&problem, &design, &opts);
+
+    // 保留 initial 作為 LP-init 沒有解時的 fallback，以及 Phase 2 的 dual-seed 起點
     LpSolution initial;
-    sa_init_from_design(&problem, &design, opts, &initial.d_ss, &initial.d_ff);
+    lp_eval_init_from_design(&problem, &design, opts, &initial.d_ss, &initial.d_ff);
 
     const auto lp_t0 = std::chrono::steady_clock::now();
 
@@ -261,12 +271,12 @@ int main(int argc, char **argv)
         !lp_init.d_ss.empty()) {
         // NOTE: `initial` must keep holding the true original-design delays (not lp_init's) -
         // Phase 2 reuses it as a guaranteed-safe second seed for greedy.
-        sa_result.lp_init_ok = 1;
+        solver_result.lp_init_ok = 1;
         std::printf("LP init: %s (status=%d)\n", lp_init.solver_name.c_str(), lp_init.status);
         {
-            SaPgCtx lp_ctx;
-            if (sa_build_ctx(&problem, &design, &lp_ctx)) {
-                sa_eval_state(&problem, &design, lp_init.d_ss, lp_init.d_ff, &dp_ss, &dp_ff, &lp_ctx);
+            LpEvalCtx lp_ctx;
+            if (lp_eval_build_ctx(&problem, &design, &lp_ctx)) {
+                lp_eval_state(&problem, &design, lp_init.d_ss, lp_init.d_ff, &dp_ss, &dp_ff, &lp_ctx);
                 lp_init_metrics.wns_setup_ss = lp_ctx.wns_ss;
                 lp_init_metrics.tns_setup_ss = lp_ctx.tns_ss;
                 lp_init_metrics.wns_hold_ff = lp_ctx.wns_ff;
@@ -276,12 +286,12 @@ int main(int argc, char **argv)
             }
         }
     } else {
-        sa_result.lp_init_ok = 0;
+        solver_result.lp_init_ok = 0;
         std::printf("LP init: skipped/failed, using original clock tree delays\n");
     }
-    sa_result.lp_init_sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - lp_t0).count();
-// 🔪 強制將 LP 初始解轉換為真實圖形，並請出真實裁判計分
-    if (sa_result.lp_init_ok) {
+    solver_result.lp_init_sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - lp_t0).count();
+// 強制將 LP 初始解轉換為真實圖形，並請出真實裁判計分
+    if (solver_result.lp_init_ok) {
         for (std::size_t b = 0; b < problem.branches.size(); b++) {
             const LpBranch &br = problem.branches[b];
             
@@ -335,7 +345,7 @@ int main(int argc, char **argv)
     // ---------------------------------------------------------
     // Phase 2: Greedy Local Search
     // ---------------------------------------------------------
-    if (sa_result.lp_init_ok) {
+    if (solver_result.lp_init_ok) {
         const double greedy_budget =
             std::min(greedy_time_limit, std::max(0.0, remaining_wall_sec(wall_deadline)));
         std::printf("Running greedy_post_lp (budget %.1fs, wall remaining %.1fs)...\n",
@@ -398,35 +408,32 @@ int main(int argc, char **argv)
             }
 
             // 將較佳的 Greedy 結果裝進最終要輸出的結構裡
-            sa_result.solution.d_ss = best_solution.d_ss;
-            sa_result.solution.d_ff = best_solution.d_ff;
-            sa_result.solution.status = 1;
-            sa_result.solution.solver_name = best_name;
+            solver_result.solution.d_ss = best_solution.d_ss;
+            solver_result.solution.d_ff = best_solution.d_ff;
+            solver_result.solution.status = 1;
+            solver_result.solution.solver_name = best_name;
         } else if (greedy_budget <= 0.1) {
             std::printf("Greedy skipped: no wall time remaining\n");
-            sa_result.solution = lp_init;
+            solver_result.solution = lp_init;
         } else {
             std::fprintf(stderr, "Greedy post-LP failed: %s\n", err);
-            sa_result.solution = lp_init;
+            solver_result.solution = lp_init;
         }
     } else {
-        sa_result.solution = initial;
+        solver_result.solution = initial;
     }
-    sa_result.elapsed_sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - lp_t0).count();
-
-    // ✂️ 在這裡，我們把原本呼叫 sa_path_solve 的一大段程式碼全部砍掉了！
+    solver_result.elapsed_sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - lp_t0).count();
 
     // ---------------------------------------------------------
     // Phase 3: Apply & Output
     // ---------------------------------------------------------
     std::printf("Solver: %s (status=%d, lp=%.1fs, total_elapsed=%.1fs)\n",
-                sa_result.solution.solver_name.c_str(), sa_result.solution.status,
-                sa_result.lp_init_sec, sa_result.elapsed_sec);
+                solver_result.solution.solver_name.c_str(), solver_result.solution.status,
+                solver_result.lp_init_sec, solver_result.elapsed_sec);
 
-    if (sa_apply_solution(&design, &problem, &sa_result.solution, &dp_ss, &dp_ff, err,
-                          sizeof(err)) != 0) {
+    if (apply_solution(&design, &problem, &solver_result.solution, &dp_ss, &dp_ff, err,
+                       sizeof(err)) != 0) {
         std::fprintf(stderr, "Apply failed: %s\n", err);
-        // sa_solution_free(&sa_result);
         lp_problem_free(&problem);
         pd_free_design(&design);
         pd_free_design(&orig_design);
@@ -498,10 +505,11 @@ int main(int argc, char **argv)
 
         // 寫入 result.txt
         if (lp_write_result_txt(argv[2], testcase_dir, &ori, &lp_init_metrics, &opt,
-                                sa_result.solution.solver_name.c_str(), sa_result.solution.status,
-                                total_limit, greedy_budget_at_start, sa_result.lp_init_sec,
-                                sa_result.lp_init_ok, sa_result.elapsed_sec, wall_elapsed,
-                                sa_result.iterations, sa_result.use_second_best, err,
+                                solver_result.solution.solver_name.c_str(),
+                                solver_result.solution.status, total_limit,
+                                greedy_budget_at_start, solver_result.lp_init_sec,
+                                solver_result.lp_init_ok, solver_result.elapsed_sec, wall_elapsed,
+                                solver_result.iterations, solver_result.use_second_best, err,
                                 sizeof(err)) != 0) {
             std::fprintf(stderr, "Write result.txt failed: %s\n", err);
         } else {
@@ -521,7 +529,6 @@ int main(int argc, char **argv)
         }
     }
 
-    // sa_solution_free(&sa_result);
     lp_problem_free(&problem);
     pd_free_design(&design);
     pd_free_design(&orig_design);

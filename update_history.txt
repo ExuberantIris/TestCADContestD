@@ -1,3 +1,7 @@
+********** 0626 05:08 **********
+把冗餘程式碼跟檔案刪除
+把 sa 重新命名
+
 ********** 0626 02:04 **********
 權重規則改成 Severity-based weight: 按照 slack 大小排列
 Testcase	Before (count-based weight)	After (severity-based weight)	Δ

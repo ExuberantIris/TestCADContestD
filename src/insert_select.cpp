@@ -30,6 +30,14 @@ int insert_decoupling_buffers(PdDesign *d, char *err, std::size_t err_sz)
 
     // (ancestor, child) edges at the nearest true branch point above each violating path's
     // launch/capture FF. std::set both dedupes and gives deterministic order.
+    //
+    // Both launch and capture sides are tried regardless of which corner is violating: a side
+    // that can't help *this* path directly (e.g. the launch side of a setup-only violation)
+    // often still helps because the same FF is the capture (or launch) endpoint of some *other*
+    // violating path. Restricting to only the "obviously correct" side per path was tried and
+    // measured as a net regression (-0.0116 across the 5 testcases, 4 of 5 worse) - it cut
+    // candidate count substantially but lost more value from those missed cross-path benefits
+    // than it ever saved in time budget.
     std::set<std::pair<int, int>> candidates;
     for (int p = 0; p < d->n_paths; p++) {
         const PdPath &path = d->paths[p];

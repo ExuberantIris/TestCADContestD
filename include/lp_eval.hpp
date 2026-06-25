@@ -11,7 +11,7 @@ struct BranchDpOpts {
     std::vector<double> ff_delays;
 };
 
-struct SaPgCtx {
+struct LpEvalCtx {
     std::vector<int> launch_ff;
     std::vector<int> capture_ff;
     std::vector<int> ff_path_br;
@@ -29,17 +29,10 @@ struct SaPgCtx {
     double score = 0.0;
 };
 
-bool sa_build_ctx(const LpProblem *pb, const PdDesign *d, SaPgCtx *ctx);
-void sa_build_branch_opts(const LpProblem *pb, const PdDesign *d, std::vector<BranchDpOpts> *opts);
-void sa_init_from_design(const LpProblem *pb, const PdDesign *d, const std::vector<BranchDpOpts> &opts,
-                         std::vector<double> *d_ss, std::vector<double> *d_ff);
-void sa_eval_state(const LpProblem *pb, const PdDesign *d, const std::vector<double> &d_ss,
+bool lp_eval_build_ctx(const LpProblem *pb, const PdDesign *d, LpEvalCtx *ctx);
+void lp_eval_build_branch_opts(const LpProblem *pb, const PdDesign *d, std::vector<BranchDpOpts> *opts);
+void lp_eval_init_from_design(const LpProblem *pb, const PdDesign *d, const std::vector<BranchDpOpts> &opts,
+                              std::vector<double> *d_ss, std::vector<double> *d_ff);
+void lp_eval_state(const LpProblem *pb, const PdDesign *d, const std::vector<double> &d_ss,
                    const std::vector<double> &d_ff, const LpBufferChainDp *dp_ss,
-                   const LpBufferChainDp *dp_ff, SaPgCtx *ctx);
-void sa_branch_weights(const LpProblem *pb, const SaPgCtx &ctx, std::vector<double> *weights);
-
-/** Path violation weight = sum of negative slacks (setup + hold). */
-double sa_path_violation_weight(const SaPgCtx &ctx, int path_idx);
-
-void sa_path_branches_launch(const SaPgCtx &ctx, int path_idx, std::vector<int> *branches);
-void sa_path_branches_capture(const SaPgCtx &ctx, int path_idx, std::vector<int> *branches);
+                   const LpBufferChainDp *dp_ff, LpEvalCtx *ctx);

@@ -7,7 +7,6 @@
 #include "lp_buffer_dp.hpp"
 #include "lp_score.hpp"
 #include "lp_types.hpp"
-#include "sa_eval.hpp"
 
 int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpProblem *pb,
                    const PdDesign *d, const LpBufferChainDp *dp_ss,

@@ -20,18 +20,18 @@ PD_SRCS = $(PD_DIR)/src/pd_parser.c \
           $(PD_DIR)/src/pd_mutate.c \
           $(PD_DIR)/src/pd_checker.c
 
-SA_SRCS = src/main.cpp \
+SOLVER_SRCS = src/main.cpp \
           src/lp_branch.cpp \
           src/lp_score.cpp \
           src/lp_buffer_dp.cpp \
           src/lp_mo_init.cpp \
-          src/sa_eval.cpp \
-          src/sa_apply.cpp \
+          src/lp_eval.cpp \
+          src/apply_solution.cpp \
           src/greedy_postlp.cpp \
           src/insert_select.cpp
 
 PD_OBJS = $(PD_SRCS:.c=.lp.o)
-SA_OBJS = $(SA_SRCS:.cpp=.o)
+SOLVER_OBJS = $(SOLVER_SRCS:.cpp=.o)
 
 UNITTEST_SRCS = unittest/test_buffer_chain_dp.cpp
 UNITTEST_OBJS = $(UNITTEST_SRCS:.cpp=.o)
@@ -51,11 +51,8 @@ REMOVE_TEST_OBJS = $(REMOVE_TEST_SRCS:.cpp=.o)
 INSERT_SELECT_TEST_SRCS = unittest/test_insert_select.cpp
 INSERT_SELECT_TEST_OBJS = $(INSERT_SELECT_TEST_SRCS:.cpp=.o)
 
-PRINT_LP_SRCS = tools/print_lp_input.cpp src/lp_print_input.cpp
-PRINT_LP_OBJS = tools/print_lp_input.o src/lp_print_input.o
-
 # 將 report 加入 PHONY 清單
-.PHONY: all build run run-all clean unittest test_pd_mutate test_pd_checker test_pd_insert_on_child test_pd_remove_buffer test_insert_select print_lp_input report
+.PHONY: all build run run-all clean unittest test_pd_mutate test_pd_checker test_pd_insert_on_child test_pd_remove_buffer test_insert_select report
 
 all: run
 
@@ -108,11 +105,8 @@ report:
 	done
 	@echo "==> 報告生成完畢！請查看 result_summary.csv"
 
-print_lp_input: $(PD_OBJS) $(PRINT_LP_OBJS) src/lp_branch.o src/lp_score.o src/lp_buffer_dp.o src/sa_eval.o
-	$(CXX) $(CXXFLAGS) -o $@ $(PD_OBJS) $(PRINT_LP_OBJS) src/lp_branch.o src/lp_score.o src/lp_buffer_dp.o src/sa_eval.o $(LDFLAGS)
-
-sa_solver: $(PD_OBJS) $(SA_OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ $(PD_OBJS) $(SA_OBJS) $(LDFLAGS)
+sa_solver: $(PD_OBJS) $(SOLVER_OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $(PD_OBJS) $(SOLVER_OBJS) $(LDFLAGS)
 
 unittest: sa_solver $(UNITTEST_OBJS)
 	$(CXX) $(CXXFLAGS) -o test_buffer_chain_dp $(PD_OBJS) $(UNITTEST_OBJS) src/lp_branch.o src/lp_buffer_dp.o $(LDFLAGS)
@@ -138,11 +132,8 @@ $(PD_DIR)/src/%.lp.o: $(PD_DIR)/src/%.c
 src/%.o: src/%.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-tools/%.o: tools/%.cpp
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
-
 unittest/%.o: unittest/%.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(PD_OBJS) $(SA_OBJS) $(UNITTEST_OBJS) $(MUTATE_TEST_OBJS) $(CHECKER_TEST_OBJS) $(INSERT_TEST_OBJS) $(REMOVE_TEST_OBJS) $(INSERT_SELECT_TEST_OBJS) $(PRINT_LP_OBJS) sa_solver test_buffer_chain_dp test_pd_mutate test_pd_checker test_pd_insert_on_child test_pd_remove_buffer test_insert_select print_lp_input
+	rm -f $(PD_OBJS) $(SOLVER_OBJS) $(UNITTEST_OBJS) $(MUTATE_TEST_OBJS) $(CHECKER_TEST_OBJS) $(INSERT_TEST_OBJS) $(REMOVE_TEST_OBJS) $(INSERT_SELECT_TEST_OBJS) sa_solver test_buffer_chain_dp test_pd_mutate test_pd_checker test_pd_insert_on_child test_pd_remove_buffer test_insert_select

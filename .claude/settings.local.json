@@ -179,7 +179,13 @@
       "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && for tc in testcase0 testcase4; do echo \"== $tc ==\"; wc -l \"testcase/$tc/clk_tree.structure\" \"testcase/$tc/SS_delay.rpt\"; done')",
       "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && wc -l algorithm_pseudocode.txt && grep -n \"^第\\\\|^Part\\\\|^================\" algorithm_pseudocode.txt | grep -v \"^[0-9]*:===\" | head -40')",
       "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && wc -l update_history.txt')",
-      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && wc -l algorithm_pseudocode.txt')"
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && wc -l algorithm_pseudocode.txt')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && make run-all 2>&1 | tee /tmp/run_all_log8_oneside.txt')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && cat result_summary.csv 2>/dev/null; echo \"---\"; tail -5 /tmp/run_all_log8_oneside.txt 2>/dev/null')",
+      "Bash(wsl.exe -e bash -lc 'grep -iE \"LEGALITY CHECK FAILED\" /tmp/run_all_log8_oneside.txt; echo \"rc=$?\"; echo ---; grep -E \"Pre-inserted|Removed.*decoupling\" /tmp/run_all_log8_oneside.txt')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && make build 2>&1 | tail -10 && for t in test_pd_mutate test_pd_checker test_pd_insert_on_child test_pd_remove_buffer test_insert_select; do echo \"== $t ==\"; ./$t | tail -2; done')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && echo \"=== src/ ===\" && ls src/*.c src/*.cpp 2>/dev/null && echo \"=== include/ ===\" && ls include/*.h include/*.hpp 2>/dev/null && echo \"=== unittest/ ===\" && ls unittest/*.cpp 2>/dev/null && echo \"=== tools/ ===\" && ls tools/*.cpp 2>/dev/null')",
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && grep -rn \"sa_vds\\\\|SaVds\" --include=\"*.cpp\" --include=\"*.hpp\" .')"
     ]
   }
 }

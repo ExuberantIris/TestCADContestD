@@ -1,12 +1,12 @@
-#include "sa_apply.hpp"
+#include "apply_solution.hpp"
 #include "lp_types.hpp"
 #include <cstring>
 #include <cmath>
 #include <cstdio> // 為了 printf
 
-int sa_apply_solution(PdDesign *d, const LpProblem *pb, const LpSolution *sol,
-                      const LpBufferChainDp * /*dp_ss*/, const LpBufferChainDp * /*dp_ff*/,
-                      char * /*err*/, std::size_t /*err_sz*/)
+int apply_solution(PdDesign *d, const LpProblem *pb, const LpSolution *sol,
+                   const LpBufferChainDp * /*dp_ss*/, const LpBufferChainDp * /*dp_ff*/,
+                   char * /*err*/, std::size_t /*err_sz*/)
 {
     const int n = static_cast<int>(pb->branches.size());
     int applied_count = 0;
@@ -53,7 +53,7 @@ int sa_apply_solution(PdDesign *d, const LpProblem *pb, const LpSolution *sol,
         }
     }
 
-    std::printf("sa_apply: 成功替換了 %d 顆 Buffer 的尺寸！\n", applied_count);
+    std::printf("apply_solution: 成功替換了 %d 顆 Buffer 的尺寸！\n", applied_count);
 
     pd_annotate_clock(d);
     pd_compute_timing(d);

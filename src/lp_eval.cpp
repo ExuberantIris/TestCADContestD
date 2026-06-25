@@ -1,4 +1,4 @@
-#include "sa_eval.hpp"
+#include "lp_eval.hpp"
 
 #include "lp_score.hpp"
 #include "lp_types.hpp"
@@ -33,7 +33,7 @@ static double branch_area_dp(const LpBranch &br, double d_ss, double d_ff, const
     return a > 0.0 ? a : br.area_per_ss;
 }
 
-bool sa_build_ctx(const LpProblem *pb, const PdDesign *d, SaPgCtx *ctx)
+bool lp_eval_build_ctx(const LpProblem *pb, const PdDesign *d, LpEvalCtx *ctx)
 {
     const int n_ff = static_cast<int>(pb->ff_node_ids.size());
     const int n_paths = static_cast<int>(pb->path_ids.size());
@@ -94,9 +94,9 @@ bool sa_build_ctx(const LpProblem *pb, const PdDesign *d, SaPgCtx *ctx)
     return true;
 }
 
-void sa_eval_state(const LpProblem *pb, const PdDesign *d, const std::vector<double> &d_ss,
+void lp_eval_state(const LpProblem *pb, const PdDesign *d, const std::vector<double> &d_ss,
                    const std::vector<double> &d_ff, const LpBufferChainDp *dp_ss,
-                   const LpBufferChainDp *dp_ff, SaPgCtx *ctx)
+                   const LpBufferChainDp *dp_ff, LpEvalCtx *ctx)
 {
     const int n_ff = static_cast<int>(pb->ff_node_ids.size());
     const int n_paths = static_cast<int>(pb->path_ids.size());
@@ -188,7 +188,7 @@ static void subsample_delays(std::vector<double> *delays, std::size_t max_n = 32
     *delays = std::move(out);
 }
 
-void sa_build_branch_opts(const LpProblem *pb, const PdDesign *d, std::vector<BranchDpOpts> *opts)
+void lp_eval_build_branch_opts(const LpProblem *pb, const PdDesign *d, std::vector<BranchDpOpts> *opts)
 {
     opts->resize(pb->branches.size());
     for (std::size_t b = 0; b < pb->branches.size(); b++) {
@@ -229,8 +229,8 @@ void sa_build_branch_opts(const LpProblem *pb, const PdDesign *d, std::vector<Br
     }
 }
 
-void sa_init_from_design(const LpProblem *pb, const PdDesign *d, const std::vector<BranchDpOpts> &opts,
-                         std::vector<double> *d_ss, std::vector<double> *d_ff)
+void lp_eval_init_from_design(const LpProblem *pb, const PdDesign *d, const std::vector<BranchDpOpts> &opts,
+                              std::vector<double> *d_ss, std::vector<double> *d_ff)
 {
     const int n = static_cast<int>(pb->branches.size());
     d_ss->assign(static_cast<std::size_t>(n), 0.0);
@@ -258,65 +258,5 @@ void sa_init_from_design(const LpProblem *pb, const PdDesign *d, const std::vect
         };
         (*d_ss)[static_cast<std::size_t>(b)] = nearest(ss, o.ss_delays);
         (*d_ff)[static_cast<std::size_t>(b)] = nearest(ff, o.ff_delays);
-    }
-}
-
-double sa_path_violation_weight(const SaPgCtx &ctx, int path_idx)
-{
-    double w = 0.0;
-    const double ss = ctx.slack_ss[static_cast<std::size_t>(path_idx)];
-    const double ff = ctx.slack_ff[static_cast<std::size_t>(path_idx)];
-    if (ss < 0.0)
-        w += -ss;
-    if (ff < 0.0)
-        w += -ff;
-    return w;
-}
-
-void sa_path_branches_launch(const SaPgCtx &ctx, int path_idx, std::vector<int> *branches)
-{
-    branches->clear();
-    const int li = ctx.launch_ff[static_cast<std::size_t>(path_idx)];
-    if (li < 0)
-        return;
-    for (int k = ctx.ff_path_off[static_cast<std::size_t>(li)];
-         k < ctx.ff_path_off[static_cast<std::size_t>(li + 1)]; k++)
-        branches->push_back(ctx.ff_path_br[static_cast<std::size_t>(k)]);
-}
-
-void sa_path_branches_capture(const SaPgCtx &ctx, int path_idx, std::vector<int> *branches)
-{
-    branches->clear();
-    const int ci = ctx.capture_ff[static_cast<std::size_t>(path_idx)];
-    if (ci < 0)
-        return;
-    for (int k = ctx.ff_path_off[static_cast<std::size_t>(ci)];
-         k < ctx.ff_path_off[static_cast<std::size_t>(ci + 1)]; k++)
-        branches->push_back(ctx.ff_path_br[static_cast<std::size_t>(k)]);
-}
-
-void sa_branch_weights(const LpProblem *pb, const SaPgCtx &ctx, std::vector<double> *weights)
-{
-    const int n_br = static_cast<int>(pb->branches.size());
-    const int n_paths = static_cast<int>(pb->path_ids.size());
-    weights->assign(static_cast<std::size_t>(n_br), 1.0);
-
-    for (int p = 0; p < n_paths; p++) {
-        if (ctx.slack_ss[static_cast<std::size_t>(p)] >= 0.0 &&
-            ctx.slack_ff[static_cast<std::size_t>(p)] >= 0.0)
-            continue;
-
-        const int li = ctx.launch_ff[static_cast<std::size_t>(p)];
-        const int ci = ctx.capture_ff[static_cast<std::size_t>(p)];
-        if (ci >= 0) {
-            for (int k = ctx.ff_path_off[static_cast<std::size_t>(ci)];
-                 k < ctx.ff_path_off[static_cast<std::size_t>(ci + 1)]; k++)
-                (*weights)[static_cast<std::size_t>(ctx.ff_path_br[static_cast<std::size_t>(k)])] += 2.0;
-        }
-        if (li >= 0) {
-            for (int k = ctx.ff_path_off[static_cast<std::size_t>(li)];
-                 k < ctx.ff_path_off[static_cast<std::size_t>(li + 1)]; k++)
-                (*weights)[static_cast<std::size_t>(ctx.ff_path_br[static_cast<std::size_t>(k)])] += 2.0;
-        }
     }
 }
