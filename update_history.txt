@@ -1,3 +1,12 @@
+********** 0626 02:04 **********
+權重規則改成 Severity-based weight: 按照 slack 大小排列
+Testcase	Before (count-based weight)	After (severity-based weight)	Δ
+testcase0	1.190588	1.205912	+0.015324
+testcase1	1.124108	1.123755	−0.000353
+testcase2	1.385881	1.385874	−0.000007
+testcase3	1.134224	1.133345	−0.000879
+testcase4	1.278194	1.278818	+0.000624
+Total	6.112995	6.127704	+0.014
 ********** 0625 20:18 **********
 attempt 1: 按照權重排序
 剩餘 attempt: 按照權重 random
@@ -10,6 +19,17 @@ testcase4	1.276052	1.278194	+0.002142
 Total	6.101674	6.112995	+0.0113
 較大的 testcase 0、4 有改善，因為做的 iteration 次數少。 Deterministic order 是一個相對有邏輯、比瞎猜還有依據的選擇。
 testcase 1、2、3 有時間做多次 iteration，可以靠著 random 找到意外的最佳解
+
+while (improved) {           // 外層：一次 attempt 可能跑很多 pass
+    improved = false
+    for b in order:          // 內層：一個 pass，把 order 從頭掃到尾
+        找 b 目前能換到的最好的 cell
+        如果有變好：立刻 commit（馬上改掉，不是先記錄）
+                   improved = true
+    // 這個 pass 結束，檢查 improved
+}
+// 直到某個 pass 從頭到尾、每一個 buffer 都沒找到能變好的，才跳出
+
 
 ********** 0625 17:24 **********
 weighting attempt 1 too: iteration 1 就打亂順序
