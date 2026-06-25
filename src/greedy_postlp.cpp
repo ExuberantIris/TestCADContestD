@@ -519,8 +519,17 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
     for (int i = 0; i < n_br; i++)
         order[static_cast<std::size_t>(i)] = i;
 
-    // Attempt 1 always uses the natural (tree parent-before-child) order, so behavior is
-    // unchanged from before whenever there's no time left for more than one attempt.
+    // Fixed seed so the whole run (attempt 1 included) stays fully deterministic/reproducible.
+    std::mt19937 rng(0xC0FFEEu);
+
+    // Attempt 1 now also uses the weighted order rather than the plain tree (parent-before-
+    // child) order: the natural order has no special convergence property here (coordinate
+    // descent doesn't need a dependency-respecting order), it was only ever a deterministic
+    // default. Time-starved testcases (e.g. huge ones where attempt 1 alone eats most of the
+    // budget, leaving room for at most one more attempt) previously got *no* benefit from the
+    // weighting until a later shuffle attempt happened to run - this way the very first attempt
+    // already benefits from it too.
+    weighted_shuffle(&order, rng);
     const Clock::time_point initial_deadline =
         t0 + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(time_limit_sec));
     converge(order, initial_deadline);
@@ -530,8 +539,8 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
 
     // --- Shuffled-order attempts -------------------------------------------------------------
     // Coordinate-descent hill-climbing gets stuck at whatever local optimum the branch
-    // processing order leads to - the fixed tree order is just one arbitrary trajectory among
-    // many. Spend up to half of whatever time remains after the first attempt re-running
+    // processing order leads to - attempt 1's (weighted-random) order is just one trajectory
+    // among many. Spend up to half of whatever time remains after the first attempt re-running
     // convergence from the same starting point with a freshly shuffled order each time, keeping
     // the best final result; the other half is deliberately left unused so main.cpp's dual-seed
     // safety net (trying the plain original design as an alternate starting point) still gets a
@@ -545,7 +554,6 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
 
     constexpr int kPatience = 50;
     if (n_br > 1 && shuffle_budget > 0.5) {
-        std::mt19937 rng(0xC0FFEEu);
         int attempts_since_improvement = 0;
         while (before_deadline(wall_deadline) && Clock::now() < shuffle_deadline &&
                attempts_since_improvement < kPatience) {

@@ -1,3 +1,15 @@
+********** 0625 17:24 **********
+weighting attempt 1 too: iteration 1 就打亂順序
+
+Testcase	Before (shuffle-loop weighted only)	After (attempt 1 also weighted)	Δ
+testcase0	1.181334	1.181409	+0.000075
+testcase1	1.124108	1.124108	0 (identical)
+testcase2	1.385881	1.385881	0 (identical)
+testcase3	1.133304	1.134224	+0.000920
+testcase4	1.267850	1.276052	+0.008202
+Total	6.092477	6.101674	+0.009197
+
+
 ********** 0625 16:04 **********
 weighted shuffle: greedy branch 打亂方法加入權重設計:
 一個 branch 牽涉到的「目前違規 path」越多，權重越高（base 1.0，每牽涉一條違規 path +2.0。
