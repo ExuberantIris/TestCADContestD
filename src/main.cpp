@@ -18,7 +18,7 @@
 
 namespace {
 
-constexpr double kTailReserveSec = 5.0;
+constexpr double kTailReserveSec = 15.0;
 
 using SteadyClock = std::chrono::steady_clock;
 

@@ -1,3 +1,14 @@
+********** 0625 12:36 **********
+最後時間改成保留 15 秒
+Total score: 6.084626 vs. prior best 6.090574 — a −0.00595 cost (0.1%), exactly the expected price for trading ~10 seconds of guest-clock budget for the larger safety margin.
+
+Testcase	Score (before, 5s margin)	Score (now, 15s margin)	wall_elapsed_sec
+testcase0	1.180833	1.180826	585.628
+testcase1	1.122668	1.122668	453.927
+testcase2	1.382480	1.382480	438.763
+testcase3	1.133733	1.133733	495.462
+testcase4	1.270860	1.264919	586.130
+
 ********** 0625 09:34 **********
 計時稽核期間發現並修的小問題
 pd_mutate.c：pd_add_zero_cell 裡 zero cell 的 max_fanout 從 PD_MAX_FANOUT_TBL(32) 改成 1。原因：NEW_BUF_* 一定是單一 child（fanout 永遠是 1），設成 32 沒有任何功能意義，只會讓 LpBufferChainDp 的表格多算 27 個完全用不到的 row。這是計時調查時順手發現並修正的，雖然事後證實不是那 56-61 秒落差的真正原因，但本身是個正確、值得保留的修正。
