@@ -1,3 +1,19 @@
+********** 0625 16:04 **********
+weighted shuffle: greedy branch 打亂方法加入權重設計:
+一個 branch 牽涉到的「目前違規 path」越多，權重越高（base 1.0，每牽涉一條違規 path +2.0。
+然後用這個權重做「加權隨機排列」Efraimidis-Spirakis 方法：
+每個 branch 抽一個 u~Uniform(0,1)，算 key = u^(1/權重)，
+照 key 由大到小排序——權重越高，key 越容易接近 1，越容易被排到前面。
+如果所有權重都一樣，這個方法會退化成跟均勻隨機洗牌完全等價。
+(不過第一個 iteration 依然是起始拓樸排序)
+Testcase	Option A (uniform shuffle)	+ Weighted shuffle	Δ
+testcase0	1.177427	1.181334	+0.003907
+testcase1	1.123847	1.124108	+0.000261
+testcase2	1.385190	1.385881	+0.000691
+testcase3	1.131155	1.133304	+0.002149
+testcase4	1.267541	1.267850	+0.000309
+Total	6.085160	6.092477	+0.007317
+
 ********** 0625 14:24 **********
 尋找 insertion candidate 的條件：不只是看 FF 正上方是否 branch>1 而是可以繼續往上找到真正分岔位置做 insertion
 Testcase	Candidates (old→new)	Removed via zero-cell (old→new)	Survived (old→new)

@@ -483,6 +483,38 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
     // convergence attempt - every shuffled-order attempt below restarts from exactly here.
     const Snapshot start = take_snapshot();
 
+    // Per-branch weight for the biased shuffle below: 1.0 base, +2.0 for every currently
+    // violating path (at the `start` state - every shuffle attempt resets here, so this stays
+    // valid for all of them) the branch touches. Mirrors sa_eval.cpp's sa_branch_weights, but
+    // computed from branch_affected_paths (already built above) instead of a separate SaPgCtx.
+    std::vector<double> branch_weight(static_cast<std::size_t>(n_br), 1.0);
+    for (int b = 0; b < n_br; b++) {
+        for (const AffectedPath &ap : branch_affected_paths[static_cast<std::size_t>(b)]) {
+            const PdPath &p = d->paths[static_cast<std::size_t>(ap.path_idx)];
+            if (p.slack_setup_ss < 0.0 || p.slack_hold_ff < 0.0)
+                branch_weight[static_cast<std::size_t>(b)] += 2.0;
+        }
+    }
+
+    // Weighted random permutation (Efraimidis-Spirakis): key_b = u_b^(1/w_b), sorted
+    // descending. Reduces to a plain uniform shuffle when every weight is equal, and otherwise
+    // biases higher-weight (currently-violating-path) branches toward the front of the order,
+    // so hill-climbing reaches them before patience/deadline cuts an attempt short.
+    auto weighted_shuffle = [&](std::vector<int> *ord, std::mt19937 &rng) {
+        std::uniform_real_distribution<double> unif(1e-12, 1.0);
+        std::vector<std::pair<double, int>> keyed(static_cast<std::size_t>(n_br));
+        for (int b = 0; b < n_br; b++) {
+            const double w = std::max(branch_weight[static_cast<std::size_t>(b)], 1e-6);
+            keyed[static_cast<std::size_t>(b)] = {std::pow(unif(rng), 1.0 / w), b};
+        }
+        std::sort(keyed.begin(), keyed.end(),
+                 [](const std::pair<double, int> &x, const std::pair<double, int> &y) {
+                     return x.first > y.first;
+                 });
+        for (int i = 0; i < n_br; i++)
+            (*ord)[static_cast<std::size_t>(i)] = keyed[static_cast<std::size_t>(i)].second;
+    };
+
     std::vector<int> order(static_cast<std::size_t>(n_br));
     for (int i = 0; i < n_br; i++)
         order[static_cast<std::size_t>(i)] = i;
@@ -519,7 +551,7 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
                attempts_since_improvement < kPatience) {
             attempts++;
             restore_snapshot(start);
-            std::shuffle(order.begin(), order.end(), rng);
+            weighted_shuffle(&order, rng);
             converge(order, shuffle_deadline);
 
             if (cur_score > best.score + 1e-9) {
