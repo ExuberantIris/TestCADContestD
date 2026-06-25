@@ -1,4 +1,4 @@
-********** 0625 02:24 **********
+********** 0625 14:24 **********
 尋找 insertion candidate 的條件：不只是看 FF 正上方是否 branch>1 而是可以繼續往上找到真正分岔位置做 insertion
 Testcase	Candidates (old→new)	Removed via zero-cell (old→new)	Survived (old→new)
 testcase0	18597 → 19679 (+5.8%)	15968 → 16908	2629 → 2771
