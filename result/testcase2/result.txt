@@ -2,10 +2,10 @@ sa_solver result
 testcase_dir: testcase/testcase2
 time_limit_sec: 600.0
 greedy_phase_limit_sec: 555.0
-lp_init_sec: 0.675
+lp_init_sec: 0.567
 lp_init_ok: 1
-wall_elapsed_sec: 439.196
-optimize_elapsed_sec: 437.958
+wall_elapsed_sec: 439.887
+optimize_elapsed_sec: 438.175
 solver: Greedy_Best_Impr_OrigSeed
 solver_status: 1
 

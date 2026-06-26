@@ -219,7 +219,14 @@
       "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && make run-all 2>&1 | tee /tmp/run_all_log9_cleanup.txt')",
       "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && grep -rln \"README.txt\\\\|Modification.md\\\\|architect.md\\\\|plan.txt\\\\|lib/glpk\\\\|lib/graaf\" --include=\"*.cpp\" --include=\"*.c\" --include=\"*.h\" --include=\"*.hpp\" --include=\"Makefile\" . 2>/dev/null')",
       "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && git status --short | grep -vE \"^ M result/|settings.local\" | head -60; echo \"---diff stat \\(non-result\\)---\"; git diff --stat HEAD -- . \":\\(exclude\\)result\" 2>&1 | tail -5')",
-      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && cat result_summary.csv && echo \"---\" && grep -iE \"LEGALITY CHECK FAILED\" /tmp/run_all_log9_cleanup.txt; echo \"rc=$?\"')"
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && cat result_summary.csv && echo \"---\" && grep -iE \"LEGALITY CHECK FAILED\" /tmp/run_all_log9_cleanup.txt; echo \"rc=$?\"')",
+      "Bash(echo '#include <algorithm> *)",
+      "Bash(g++ -std=c++17 -c clamp_test_tmp.cpp -o clamp_test_tmp.o)",
+      "Bash(rm -f clamp_test_tmp.cpp clamp_test_tmp.o)",
+      "Bash(git status *)",
+      "Bash(git ls-tree *)",
+      "Bash(git log *)",
+      "Bash(git show *)"
     ]
   }
 }

@@ -4,8 +4,8 @@ time_limit_sec: 600.0
 greedy_phase_limit_sec: 555.0
 lp_init_sec: 0.000
 lp_init_ok: 1
-wall_elapsed_sec: 0.090
-optimize_elapsed_sec: 0.014
+wall_elapsed_sec: 0.055
+optimize_elapsed_sec: 0.016
 solver: Greedy_Best_Impr
 solver_status: 1
 
