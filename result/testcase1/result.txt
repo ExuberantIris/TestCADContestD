@@ -1,13 +1,11 @@
-sa_solver_prime result
+sa_solver result
 testcase_dir: testcase/testcase1
 time_limit_sec: 600.0
-sa_phase_limit_sec: 555.0
-lp_init_sec: 1.279
+greedy_phase_limit_sec: 555.0
+lp_init_sec: 1.053
 lp_init_ok: 1
-wall_elapsed_sec: 452.384
-sa_elapsed_sec: 448.883
-sa_iterations: 0
-use_second_best: 0
+wall_elapsed_sec: 446.214
+optimize_elapsed_sec: 443.671
 solver: Greedy_Best_Impr
 solver_status: 1
 

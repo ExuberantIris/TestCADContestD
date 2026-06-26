@@ -78,10 +78,9 @@ void lp_print_metrics(const char *label, const LpMetrics *m)
 
 int lp_write_result_txt(const char *result_dir, const char *testcase_dir, const LpMetrics *ori,
                         const LpMetrics *lp_init, const LpMetrics *opt, const char *solver_name,
-                        int solver_status, double time_limit_sec, double sa_phase_limit_sec,
-                        double lp_init_sec, int lp_init_ok, double sa_elapsed_sec,
-                        double wall_elapsed_sec, long long sa_iterations, int use_second_best,
-                        char *err, std::size_t err_sz)
+                        int solver_status, double time_limit_sec, double greedy_phase_limit_sec,
+                        double lp_init_sec, int lp_init_ok, double optimize_elapsed_sec,
+                        double wall_elapsed_sec, char *err, std::size_t err_sz)
 {
     char path[1024];
     FILE *fp;
@@ -98,16 +97,14 @@ int lp_write_result_txt(const char *result_dir, const char *testcase_dir, const 
         return -1;
     }
 
-    std::fprintf(fp, "sa_solver_prime result\n");
+    std::fprintf(fp, "sa_solver result\n");
     std::fprintf(fp, "testcase_dir: %s\n", testcase_dir);
     std::fprintf(fp, "time_limit_sec: %.1f\n", time_limit_sec);
-    std::fprintf(fp, "sa_phase_limit_sec: %.1f\n", sa_phase_limit_sec);
+    std::fprintf(fp, "greedy_phase_limit_sec: %.1f\n", greedy_phase_limit_sec);
     std::fprintf(fp, "lp_init_sec: %.3f\n", lp_init_sec);
     std::fprintf(fp, "lp_init_ok: %d\n", lp_init_ok);
     std::fprintf(fp, "wall_elapsed_sec: %.3f\n", wall_elapsed_sec);
-    std::fprintf(fp, "sa_elapsed_sec: %.3f\n", sa_elapsed_sec);
-    std::fprintf(fp, "sa_iterations: %lld\n", static_cast<long long>(sa_iterations));
-    std::fprintf(fp, "use_second_best: %d\n", use_second_best);
+    std::fprintf(fp, "optimize_elapsed_sec: %.3f\n", optimize_elapsed_sec);
     std::fprintf(fp, "solver: %s\n", solver_name ? solver_name : "(unknown)");
     std::fprintf(fp, "solver_status: %d\n\n", solver_status);
 

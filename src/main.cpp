@@ -61,16 +61,13 @@ static double read_greedy_time_limit()
     return 540.0; /* 9 min */
 }
 
-// Bundles the winning LpSolution plus the timing/iteration stats Phase 3 needs for the
-// result.txt report - just a data carrier between Phase 2 (Greedy) and Phase 3 (Apply & Output).
+// Bundles the winning LpSolution plus the timing stats Phase 3 needs for the result.txt report -
+// just a data carrier between Phase 2 (Greedy) and Phase 3 (Apply & Output).
 struct SolverResult {
     LpSolution solution;
     double elapsed_sec = 0.0;
     double lp_init_sec = 0.0;
     int lp_init_ok = 0;
-    int timed_out = 0;
-    int use_second_best = 0;
-    long long iterations = 0;
 };
 
 int main(int argc, char **argv)
@@ -106,15 +103,17 @@ int main(int argc, char **argv)
         wall_t0 + std::chrono::duration_cast<SteadyClock::duration>(
                       std::chrono::duration<double>(std::max(0.0, total_limit - kTailReserveSec)));
 
-    const double lp_budget =
-        std::min(lp_init_limit, std::max(0.0, remaining_wall_sec(wall_deadline)));
     const double greedy_budget_at_start =
         std::min(greedy_time_limit, std::max(0.0, remaining_wall_sec(wall_deadline)));
 
-    std::printf("=== sa_solver (Greedy Focus Version) ===\n");
+    std::printf("=== sa_solver ===\n");
     std::printf("Input folder: %s\n", testcase_dir);
-    std::printf("Total limit : %.1f sec | LP init: %.1f sec (budget %.1f) | Greedy cap: %.1f sec\n",
-                total_limit, lp_init_limit, lp_budget, greedy_time_limit);
+    // lp_init_limit caps *each* of the two LP-init calls independently (Phase 0's diagnostic
+    // pass and Phase 1's real one, see algorithm_pseudocode.txt section 2.2) - their actual
+    // budgets are computed fresh right before each call, not shown here, since a single
+    // up-front number can't represent both.
+    std::printf("Total limit : %.1f sec | LP init cap (per call): %.1f sec | Greedy cap: %.1f sec\n",
+                total_limit, lp_init_limit, greedy_time_limit);
     std::printf("Wall deadline: %.1f sec (reserve %.1f sec for output)\n",
                 std::chrono::duration<double>(wall_deadline - wall_t0).count(), kTailReserveSec);
 
@@ -509,8 +508,7 @@ int main(int argc, char **argv)
                                 solver_result.solution.status, total_limit,
                                 greedy_budget_at_start, solver_result.lp_init_sec,
                                 solver_result.lp_init_ok, solver_result.elapsed_sec, wall_elapsed,
-                                solver_result.iterations, solver_result.use_second_best, err,
-                                sizeof(err)) != 0) {
+                                err, sizeof(err)) != 0) {
             std::fprintf(stderr, "Write result.txt failed: %s\n", err);
         } else {
             char result_txt[1024];
