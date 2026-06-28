@@ -230,22 +230,12 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
     refresh_design_timing(d);
     double cur_score = score_design(pb, d);
 
-    if (cur_score < 0.0) {
-        std::printf("greedy_post_lp: LP init score worse than baseline; reverting\n");
-        for (int b = 0; b < n_br; b++) {
-            const LpBranch &br = pb->branches[static_cast<std::size_t>(b)];
-            if (br.kind != LpBranchKind::ExistingBuf || br.cell_idx < 0)
-                continue;
-            apply_cell_to_branch(d, br, br.cell_idx, &cur_ss, &cur_ff, b);
-            std::strncpy(d->nodes[br.child_node].cell, d->cells[br.cell_idx].name, PD_MAX_NAME - 1);
-            d->nodes[br.child_node].cell[PD_MAX_NAME - 1] = '\0';
-        }
-        pd_annotate_clock(d);
-        refresh_design_timing(d);
-        cur_score = score_design(pb, d);
-        const_cast<LpMetrics *>(lp_init_metrics)->wns_hold_ff = d->wns_hold_ff;
-        const_cast<LpMetrics *>(lp_init_metrics)->tns_hold_ff = d->tns_hold_ff;
-    }
+    // No internal revert-to-baseline here: the caller (main.cpp) now decides up front which of
+    // the two candidate seeds (LP-init vs. the untouched original design) scores higher and
+    // always feeds that one in first, so a worse-than-baseline seed reaching this function is
+    // either the deliberately-explored second seed or already a contradiction. Silently
+    // overriding it here used to make the second dual-seed call an exact, wasted duplicate of
+    // the first whenever LP init scored worse than baseline.
 
     std::vector<std::vector<int>> branch_candidates;
     build_branch_candidates(d, pb, &branch_candidates);
@@ -534,8 +524,21 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
     // below to ever explore) and only gave up a negligible amount on the testcases with ample
     // slack to run many shuffle attempts regardless. Random exploration still happens - it just
     // starts from attempt 2 onward instead of attempt 1.
+    // Tie-break: branches sitting on the same exclusive chain down to the same FF(s) share the
+    // exact same set of affected paths, hence the exact same weight - among such ties, visiting
+    // the allow_zero_cell (freshly-inserted) branch first gives it first crack at the need before
+    // an existing branch's commit (made assuming the new branch's current value is fixed) locks
+    // the new branch into whatever it started at instead of letting it discover it isn't needed.
     std::sort(order.begin(), order.end(), [&](int a, int b) {
-        return branch_weight[static_cast<std::size_t>(a)] > branch_weight[static_cast<std::size_t>(b)];
+        const double wa = branch_weight[static_cast<std::size_t>(a)];
+        const double wb = branch_weight[static_cast<std::size_t>(b)];
+        // Branches on the same exclusive chain accumulate the identical severity sum via
+        // different traversal orders, so they can differ by float noise without being a real
+        // difference - use a relative tolerance instead of exact equality to still catch them.
+        if (std::fabs(wa - wb) > 1e-9 * std::max(1.0, std::max(wa, wb)))
+            return wa > wb;
+        return pb->branches[static_cast<std::size_t>(a)].allow_zero_cell &&
+               !pb->branches[static_cast<std::size_t>(b)].allow_zero_cell;
     });
     const Clock::time_point initial_deadline =
         t0 + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(time_limit_sec));

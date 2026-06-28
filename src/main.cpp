@@ -348,11 +348,44 @@ int main(int argc, char **argv)
     if (solver_result.lp_init_ok) {
         const double greedy_budget =
             std::min(greedy_time_limit, std::max(0.0, remaining_wall_sec(wall_deadline)));
-        std::printf("Running greedy_post_lp (budget %.1fs, wall remaining %.1fs)...\n",
-                    greedy_budget, remaining_wall_sec(wall_deadline));
+
+        // Greedy's single-buffer hill-climbing is path-dependent: a better LP-init start does
+        // not always reach a better local optimum than starting from the plain original design
+        // (observed empirically on some testcases). We always run two rounds (LP-init seed,
+        // original-design seed) and keep whichever final result actually scores higher - but
+        // whichever of the two *currently* scores higher goes first and gets the larger budget,
+        // so the two rounds always explore two genuinely different starting points. (Previously
+        // round 1 always used the LP-init seed unconditionally, and greedy_post_lp silently
+        // reverted it to the original design internally whenever LP init scored worse than
+        // baseline - making round 2's baseline-seeded run an exact, wasted duplicate of round 1
+        // in that case, since both then started from the same snapshot with the same fixed RNG
+        // seed.)
+        LpSolution baseline_seed = initial;
+        LpMetrics baseline_metrics{};
+        baseline_metrics.wns_setup_ss = problem.wns_ss_ori;
+        baseline_metrics.tns_setup_ss = problem.tns_ss_ori;
+        baseline_metrics.wns_hold_ff = problem.wns_ff_ori;
+        baseline_metrics.tns_hold_ff = problem.tns_ff_ori;
+        baseline_metrics.area = problem.area_ori;
+        baseline_metrics.score = 0.0;
+
+        LpSolution *first_seed = &lp_init;
+        LpMetrics *first_metrics = &lp_init_metrics;
+        const char *first_name = "Greedy_Best_Impr";
+        LpSolution *second_seed = &baseline_seed;
+        LpMetrics *second_seed_metrics = &baseline_metrics;
+        const char *second_name = "Greedy_Best_Impr_OrigSeed";
+        if (lp_init_metrics.score < 0.0) {
+            std::swap(first_seed, second_seed);
+            std::swap(first_metrics, second_seed_metrics);
+            std::swap(first_name, second_name);
+        }
+
+        std::printf("Running greedy_post_lp from %s seed (budget %.1fs, wall remaining %.1fs)...\n",
+                    first_name, greedy_budget, remaining_wall_sec(wall_deadline));
         if (greedy_budget > 0.1 &&
-            greedy_post_lp(argv[2], testcase_dir, &problem, &design, &dp_ss, &dp_ff, &lp_init,
-                           &lp_init_metrics, greedy_budget, wall_deadline, err,
+            greedy_post_lp(argv[2], testcase_dir, &problem, &design, &dp_ss, &dp_ff, first_seed,
+                           first_metrics, greedy_budget, wall_deadline, err,
                            sizeof(err)) == 0) {
             std::printf("Greedy optimization finished successfully.\n");
 
@@ -362,45 +395,31 @@ int main(int argc, char **argv)
                 best_metrics.wns_setup_ss, best_metrics.tns_setup_ss, best_metrics.wns_hold_ff,
                 best_metrics.tns_hold_ff, best_metrics.area, problem.wns_ss_ori, problem.tns_ss_ori,
                 problem.wns_ff_ori, problem.tns_ff_ori, problem.area_ori);
-            LpSolution best_solution = lp_init;
-            const char *best_name = "Greedy_Best_Impr";
+            LpSolution best_solution = *first_seed;
+            const char *best_name = first_name;
 
-            // Greedy's single-buffer hill-climbing is path-dependent: a better LP-init start
-            // does not always reach a better local optimum than starting from the plain
-            // original design (observed empirically on some testcases). If there's
-            // meaningful time left, also try greedy from the untouched original design and
-            // keep whichever final result actually scores higher, so the LP-init replacement
-            // can never make the result worse than the old "no real LP init" behavior.
             const double remaining_after = remaining_wall_sec(wall_deadline);
             if (remaining_after > 5.0) {
                 std::printf(
-                    "Running second greedy_post_lp from original-design seed (budget %.1fs)...\n",
-                    remaining_after);
-                LpSolution baseline_seed = initial;
-                LpMetrics baseline_metrics{};
-                baseline_metrics.wns_setup_ss = problem.wns_ss_ori;
-                baseline_metrics.tns_setup_ss = problem.tns_ss_ori;
-                baseline_metrics.wns_hold_ff = problem.wns_ff_ori;
-                baseline_metrics.tns_hold_ff = problem.tns_ff_ori;
-                baseline_metrics.area = problem.area_ori;
-                baseline_metrics.score = 0.0;
+                    "Running second greedy_post_lp from %s seed (budget %.1fs)...\n",
+                    second_name, remaining_after);
 
                 if (greedy_post_lp(argv[2], testcase_dir, &problem, &design, &dp_ss, &dp_ff,
-                                   &baseline_seed, &baseline_metrics, remaining_after,
+                                   second_seed, second_seed_metrics, remaining_after,
                                    wall_deadline, err, sizeof(err)) == 0) {
-                    LpMetrics second_metrics{};
-                    lp_compute_metrics(&design, &second_metrics);
-                    second_metrics.score = lp_compute_score(
-                        second_metrics.wns_setup_ss, second_metrics.tns_setup_ss,
-                        second_metrics.wns_hold_ff, second_metrics.tns_hold_ff, second_metrics.area,
-                        problem.wns_ss_ori, problem.tns_ss_ori, problem.wns_ff_ori,
-                        problem.tns_ff_ori, problem.area_ori);
+                    LpMetrics second_round_metrics{};
+                    lp_compute_metrics(&design, &second_round_metrics);
+                    second_round_metrics.score = lp_compute_score(
+                        second_round_metrics.wns_setup_ss, second_round_metrics.tns_setup_ss,
+                        second_round_metrics.wns_hold_ff, second_round_metrics.tns_hold_ff,
+                        second_round_metrics.area, problem.wns_ss_ori, problem.tns_ss_ori,
+                        problem.wns_ff_ori, problem.tns_ff_ori, problem.area_ori);
                     std::printf("Second greedy result score=%.6f (first was %.6f)\n",
-                                second_metrics.score, best_metrics.score);
-                    if (second_metrics.score > best_metrics.score) {
-                        best_metrics = second_metrics;
-                        best_solution = baseline_seed;
-                        best_name = "Greedy_Best_Impr_OrigSeed";
+                                second_round_metrics.score, best_metrics.score);
+                    if (second_round_metrics.score > best_metrics.score) {
+                        best_metrics = second_round_metrics;
+                        best_solution = *second_seed;
+                        best_name = second_name;
                     }
                 } else {
                     std::fprintf(stderr, "Second greedy post-LP failed: %s\n", err);

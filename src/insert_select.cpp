@@ -6,18 +6,12 @@
 
 bool pd_find_branch_point(const PdDesign *d, int ff_id, int *out_ancestor, int *out_child)
 {
-    int child = ff_id;
-    int cur = d->nodes[ff_id].parent;
-    while (cur >= 0 && d->nodes[cur].kind == PD_NODE_BUF) {
-        if (d->nodes[cur].nchildren > 1) {
-            *out_ancestor = cur;
-            *out_child = child;
-            return true;
-        }
-        child = cur;
-        cur = d->nodes[cur].parent;
-    }
-    return false;
+    const int parent = d->nodes[ff_id].parent;
+    if (parent < 0 || d->nodes[parent].kind != PD_NODE_BUF)
+        return false;
+    *out_ancestor = parent;
+    *out_child = ff_id;
+    return true;
 }
 
 int insert_decoupling_buffers(PdDesign *d, char *err, std::size_t err_sz)

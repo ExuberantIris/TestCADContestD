@@ -185,7 +185,29 @@
       "Bash(wsl.exe -e bash -lc 'grep -iE \"LEGALITY CHECK FAILED\" /tmp/run_all_log8_oneside.txt; echo \"rc=$?\"; echo ---; grep -E \"Pre-inserted|Removed.*decoupling\" /tmp/run_all_log8_oneside.txt')",
       "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && make build 2>&1 | tail -10 && for t in test_pd_mutate test_pd_checker test_pd_insert_on_child test_pd_remove_buffer test_insert_select; do echo \"== $t ==\"; ./$t | tail -2; done')",
       "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && echo \"=== src/ ===\" && ls src/*.c src/*.cpp 2>/dev/null && echo \"=== include/ ===\" && ls include/*.h include/*.hpp 2>/dev/null && echo \"=== unittest/ ===\" && ls unittest/*.cpp 2>/dev/null && echo \"=== tools/ ===\" && ls tools/*.cpp 2>/dev/null')",
-      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && grep -rn \"sa_vds\\\\|SaVds\" --include=\"*.cpp\" --include=\"*.hpp\" .')"
+      "Bash(wsl.exe -e bash -lc 'cd \"/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD\" && grep -rn \"sa_vds\\\\|SaVds\" --include=\"*.cpp\" --include=\"*.hpp\" .')",
+      "Bash(git log *)",
+      "Bash(g++ -std=c++17 -Wall -Wextra -O2 -Iinclude -c src/main.cpp -o /dev/null)",
+      "Bash(g++ -std=c++17 -Wall -Wextra -O2 -Iinclude -fsyntax-only src/greedy_postlp.cpp)",
+      "Bash(g++ -std=c++17 -Wall -Wextra -O2 -Iinclude -fsyntax-only src/insert_select.cpp)",
+      "Bash(g++ -std=c++17 -Wall -Wextra -O2 -Iinclude -fsyntax-only unittest/test_insert_select.cpp)",
+      "Bash(gcc -dumpmachine)",
+      "Bash(g++ -dumpmachine)",
+      "Bash(ldd --version)",
+      "Bash(chmod +x test_insert_select)",
+      "Bash(./test_insert_select testcase/testcase2)",
+      "Read(//c/MinGW/bin/**)",
+      "Bash(wsl.exe ./test_insert_select testcase/testcase2)",
+      "Bash(git status *)",
+      "Bash(wsl.exe -e bash -lc \"echo OK; uname -a; which gcc g++ make 2>&1; gcc --version | head -1; make --version | head -1\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' 2>&1 && pwd && grep -n 'pd_find_branch_point' -A6 src/insert_select.cpp | head -10\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make build 2>&1 | tail -40\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && make test_insert_select 2>&1 | tail -20 && echo '--- RUN ---' && ./test_insert_select testcase/testcase2 2>&1\")",
+      "Bash(wsl.exe -e bash -lc \"cd '/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD' && SA_TIME_LIMIT=60 LP_INIT_TIME_LIMIT=10 ./sa_solver testcase/testcase2 /tmp/tc2_smoke 2>&1 | tail -25 && echo '--- result.txt ---' && cat /tmp/tc2_smoke/result.txt\")",
+      "Bash(wsl.exe -e bash -lc ' *)",
+      "Bash(gh pr *)",
+      "Bash(wsl.exe -e bash -lc 'cd '\\\\''/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD'\\\\'' && make build 2>&1 | tail -10 && echo BUILD_OK')",
+      "Bash(wsl.exe -e bash -lc 'cd '\\\\''/mnt/c/Users/leewe/OneDrive/桌面/台大_講義_作業/114-2/eda 導/TestCADContestD'\\\\'' && rm -rf .git/worktrees/94d3df4 .git/worktrees/d5be786 && echo CLEANED')"
     ]
   }
 }

@@ -45,9 +45,9 @@ void check(bool cond, const std::string &label)
     }
 }
 
-/** First FF whose direct parent already drives more than one child - the case the *old*
- *  direct-parent-only logic already handled; pd_find_branch_point must still return exactly
- *  this same edge for it (old behavior is the n=0-extra-hops special case of the new walk). */
+/** First FF whose direct parent already drives more than one child - just a convenient,
+ *  real-data spot check; pd_find_branch_point no longer treats this any differently from any
+ *  other FF with a buffer parent. */
 int find_ff_with_branching_direct_parent(const PdDesign &d)
 {
     for (int i = 0; i < d.n_nodes; i++) {
@@ -60,27 +60,6 @@ int find_ff_with_branching_direct_parent(const PdDesign &d)
     return -1;
 }
 
-/** First FF whose direct parent is a *single-child* buffer (the case the old logic missed
- *  entirely), walking up further to require at least one more single-child hop before any
- *  branch point, so the test actually exercises "walk past more than one level". */
-int find_ff_needing_multi_hop_walk(const PdDesign &d, int min_single_child_hops)
-{
-    for (int i = 0; i < d.n_nodes; i++) {
-        if (d.nodes[i].kind != PD_NODE_FF)
-            continue;
-        int hops = 0;
-        int cur = d.nodes[i].parent;
-        while (cur >= 0 && d.nodes[cur].kind == PD_NODE_BUF && d.nodes[cur].nchildren == 1) {
-            hops++;
-            cur = d.nodes[cur].parent;
-        }
-        if (hops >= min_single_child_hops && cur >= 0 && d.nodes[cur].kind == PD_NODE_BUF &&
-            d.nodes[cur].nchildren > 1)
-            return i;
-    }
-    return -1;
-}
-
 } // namespace
 
 int main(int argc, char **argv)
@@ -88,7 +67,8 @@ int main(int argc, char **argv)
     const std::string testcase_dir = resolve_testcase_dir(argc, argv);
     char err[512];
 
-    std::cout << "=== unittest: pd_find_branch_point / insert_decoupling_buffers (widened) ===\n";
+    std::cout << "=== unittest: pd_find_branch_point / insert_decoupling_buffers "
+                 "(direct-parent-only) ===\n";
     std::cout << "testcase_dir: " << testcase_dir << "\n\n";
 
     PdDesign d{};
@@ -99,7 +79,7 @@ int main(int argc, char **argv)
     pd_annotate_clock(&d);
     pd_compute_timing(&d);
 
-    // --- Case 1: direct parent already branches - must match the old behavior exactly -------
+    // --- Case 1: direct parent branches - returns (parent, ff), and is deterministic ----------
     {
         const int ff = find_ff_with_branching_direct_parent(d);
         if (ff < 0) {
@@ -107,41 +87,24 @@ int main(int argc, char **argv)
         } else {
             int ancestor = -1, child = -1;
             const bool ok = pd_find_branch_point(&d, ff, &ancestor, &child);
-            check(ok, "branch point found for an FF whose direct parent already branches");
-            check(ancestor == d.nodes[ff].parent,
-                 "...and it is exactly the direct parent (0-extra-hop case unchanged)");
-            check(child == ff, "...with child == the FF itself, matching the old (parent, ff) edge");
+            check(ok, "branch point found for an FF whose direct parent branches");
+            check(ancestor == d.nodes[ff].parent, "...and it is exactly the direct parent");
+            check(child == ff, "...with child == the FF itself");
+
+            // Same ff_id must always resolve to the same (ancestor, child) edge - this is the
+            // determinism insert_decoupling_buffers' std::set-based dedup relies on, regardless
+            // of how many violating paths re-discover the same FF.
+            int ancestor2 = -1, child2 = -1;
+            const bool ok2 = pd_find_branch_point(&d, ff, &ancestor2, &child2);
+            check(ok2 && ancestor2 == ancestor && child2 == child,
+                 "...repeated calls for the same ff_id return the identical edge (dedup-safe)");
         }
     }
 
-    // --- Case 2: direct parent is single-child - must walk past it to the real branch point -
-    {
-        const int ff = find_ff_needing_multi_hop_walk(d, 1);
-        if (ff < 0) {
-            std::cout << "  [SKIP] no FF requiring a multi-hop walk found in this testcase\n";
-        } else {
-            int ancestor = -1, child = -1;
-            const bool ok = pd_find_branch_point(&d, ff, &ancestor, &child);
-            check(ok, "branch point found by walking past single-child ancestors");
-            check(ancestor != d.nodes[ff].parent,
-                 "...and it is NOT the direct parent (this is the case the old logic missed)");
-            check(d.nodes[ancestor].kind == PD_NODE_BUF && d.nodes[ancestor].nchildren > 1,
-                 "...the returned ancestor genuinely branches");
-            // child must be the one of ancestor's direct children whose subtree contains ff.
-            bool child_is_direct_child_of_ancestor = false;
-            for (int k = 0; k < d.nodes[ancestor].nchildren; k++)
-                if (d.nodes[ancestor].children[k] == child)
-                    child_is_direct_child_of_ancestor = true;
-            check(child_is_direct_child_of_ancestor,
-                 "...child is one of the ancestor's direct children");
-        }
-    }
-
-    // --- Case 3: no branch point exists below the root - hand-built unbranched chain
-    // (root -> single-child buf -> single-child buf -> FF). Also covers "the branch point
-    // would be the root itself": the root is PD_NODE_ROOT, never PD_NODE_BUF, so the walk's
-    // loop condition must stop before ever considering it a valid insertion point (matching
-    // pd_insert_buffer_on_child's own requirement that the parent be a real buffer). ----------
+    // --- Case 2: direct parent is single-child, deep in an unbranched chain - must NOT walk
+    // further up; returns the direct parent unchanged, since splicing a buffer anywhere along an
+    // exclusive chain has an identical timing effect (no fork ever exists in this hand-built
+    // tree, so the *old* walk-to-fork logic would have returned false here). -------------------
     {
         PdNode nodes[4] = {};
         int root_children[1] = {1};
@@ -177,14 +140,42 @@ int main(int argc, char **argv)
 
         int ancestor = -1, child = -1;
         const bool ok = pd_find_branch_point(&chain, 3, &ancestor, &child);
-        check(!ok, "an entirely unbranched chain up to the root correctly reports no branch point");
+        check(ok, "branch point found even though no fork exists anywhere in the chain");
+        check(ancestor == 2, "...and it is exactly the FF's direct parent, not walked further up");
+        check(child == 3, "...with child == the FF itself");
     }
 
-    // --- End-to-end: run the widened insert_decoupling_buffers and sanity-check the result --
+    // --- Case 3: FF's direct parent is the root (no buffer in between) - must report no branch
+    // point, matching pd_insert_buffer_on_child's requirement that the parent be a real buffer.
+    {
+        PdNode nodes[2] = {};
+        int root_children[1] = {1};
+
+        nodes[0].id = 0;
+        nodes[0].kind = PD_NODE_ROOT;
+        nodes[0].parent = -1;
+        nodes[0].children = root_children;
+        nodes[0].nchildren = 1;
+
+        nodes[1].id = 1;
+        nodes[1].kind = PD_NODE_FF;
+        nodes[1].parent = 0;
+        nodes[1].nchildren = 0;
+
+        PdDesign rootonly{};
+        rootonly.nodes = nodes;
+        rootonly.n_nodes = 2;
+
+        int ancestor = -1, child = -1;
+        const bool ok = pd_find_branch_point(&rootonly, 1, &ancestor, &child);
+        check(!ok, "an FF driven directly by the root correctly reports no branch point");
+    }
+
+    // --- End-to-end: run insert_decoupling_buffers and sanity-check the result ----------------
     {
         const int n_inserted = insert_decoupling_buffers(&d, err, sizeof(err));
         check(n_inserted >= 0, "insert_decoupling_buffers succeeds");
-        std::printf("insert_decoupling_buffers: %d buffer(s) inserted (widened branch-point search)\n",
+        std::printf("insert_decoupling_buffers: %d buffer(s) inserted (direct-parent-only)\n",
                    n_inserted);
 
         std::set<std::string> names;
@@ -192,14 +183,14 @@ int main(int argc, char **argv)
         for (int i = 0; i < d.n_nodes; i++)
             if (!names.insert(d.nodes[i].name).second)
                 unique_names = false;
-        check(unique_names, "all node names unique after widened insertion");
+        check(unique_names, "all node names unique after insertion (no duplicate-edge insert)");
     }
 
     PdDesign orig{};
     if (pd_load_design(testcase_dir.c_str(), &orig, err, sizeof(err)) == 0) {
         char e[512];
         check(pd_check_legality(&orig, &d, e, sizeof(e)) == 0,
-             "widened insertion result passes pd_check_legality");
+             "insertion result passes pd_check_legality");
         pd_free_design(&orig);
     }
 
