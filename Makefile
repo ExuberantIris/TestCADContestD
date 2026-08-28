@@ -70,8 +70,8 @@ run: sa_solver
 			exit 1; \
 		fi; \
 		mkdir -p "$(RESULT_DIR)/$$tc"; \
-		echo "==> Running $$tc -> $(RESULT_DIR)/$$tc (GREEDY_TIME_LIMIT=$(GREEDY_TIME_LIMIT))"; \
-		GREEDY_TIME_LIMIT=$(GREEDY_TIME_LIMIT) ./sa_solver "$(TESTCASE_DIR)/$$tc" "$(RESULT_DIR)/$$tc"; \
+		echo "==> Running $$tc -> $(RESULT_DIR)/$$tc/modified_clk_tree.structure (GREEDY_TIME_LIMIT=$(GREEDY_TIME_LIMIT))"; \
+		GREEDY_TIME_LIMIT=$(GREEDY_TIME_LIMIT) ./sa_solver "$(TESTCASE_DIR)/$$tc" "$(RESULT_DIR)/$$tc/modified_clk_tree.structure"; \
 	fi
 
 run-all: sa_solver
@@ -79,8 +79,8 @@ run-all: sa_solver
 	echo "Using GREEDY_TIME_LIMIT=$(GREEDY_TIME_LIMIT)"; \
 	for tc in $(TESTCASES); do \
 		mkdir -p "$(RESULT_DIR)/$$tc"; \
-		echo "==> Running $$tc -> $(RESULT_DIR)/$$tc"; \
-		GREEDY_TIME_LIMIT=$(GREEDY_TIME_LIMIT) ./sa_solver "$(TESTCASE_DIR)/$$tc" "$(RESULT_DIR)/$$tc"; \
+		echo "==> Running $$tc -> $(RESULT_DIR)/$$tc/modified_clk_tree.structure"; \
+		GREEDY_TIME_LIMIT=$(GREEDY_TIME_LIMIT) ./sa_solver "$(TESTCASE_DIR)/$$tc" "$(RESULT_DIR)/$$tc/modified_clk_tree.structure"; \
 	done
 	@echo "==> 所有測資執行完畢，開始產生總結報告..."
 	@$(MAKE) report

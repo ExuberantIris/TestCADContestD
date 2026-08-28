@@ -11,7 +11,6 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
-#include <sys/stat.h>
 #include <cmath>
 
 namespace {
@@ -73,9 +72,20 @@ struct SolverResult {
     long long iterations = 0;
 };
 
+static void silence_stdio()
+{
+    if (!std::freopen("/dev/null", "w", stdout)) {
+        /* keep default stdout if /dev/null is unavailable */
+    }
+    if (!std::freopen("/dev/null", "w", stderr)) {
+        /* keep default stderr if /dev/null is unavailable */
+    }
+}
+
 int main(int argc, char **argv)
 {
-    std::setvbuf(stdout, nullptr, _IONBF, 0);
+    silence_stdio();
+
     PdDesign design{};
     PdDesign orig_design{}; // untouched copy of the input, kept for the final legality gate
     LpProblem problem;
@@ -86,40 +96,29 @@ int main(int argc, char **argv)
     LpBufferChainDp dp_ss, dp_ff;
     char err[512];
     const char *testcase_dir;
+    const char *output_path;
     const auto wall_t0 = std::chrono::steady_clock::now();
 
-    if (argc < 2) {
-        std::fprintf(stderr, "Usage: %s <testcase_dir> [result_dir]\n", argv[0]);
+    if (argc < 3) {
         return 1;
     }
 
     testcase_dir = argv[1];
+    output_path = argv[2];
     lp_problem_init(&problem);
     read_time_limit(&problem);
     if (problem.time_limit_sec <= 0.0)
         problem.time_limit_sec = 600.0;
 
-    const double total_limit = problem.time_limit_sec;
     const double lp_init_limit = read_lp_init_limit();
     const double greedy_time_limit = read_greedy_time_limit();
     const auto wall_deadline =
         wall_t0 + std::chrono::duration_cast<SteadyClock::duration>(
-                      std::chrono::duration<double>(std::max(0.0, total_limit - kTailReserveSec)));
+                      std::chrono::duration<double>(
+                          std::max(0.0, problem.time_limit_sec - kTailReserveSec)));
 
-    const double lp_budget =
-        std::min(lp_init_limit, std::max(0.0, remaining_wall_sec(wall_deadline)));
-    const double greedy_budget_at_start =
-        std::min(greedy_time_limit, std::max(0.0, remaining_wall_sec(wall_deadline)));
-
-    std::printf("=== sa_solver (Greedy Focus Version) ===\n");
-    std::printf("Input folder: %s\n", testcase_dir);
-    std::printf("Total limit : %.1f sec | LP init: %.1f sec (budget %.1f) | Greedy cap: %.1f sec\n",
-                total_limit, lp_init_limit, lp_budget, greedy_time_limit);
-    std::printf("Wall deadline: %.1f sec (reserve %.1f sec for output)\n",
-                std::chrono::duration<double>(wall_deadline - wall_t0).count(), kTailReserveSec);
 
     if (pd_load_design(testcase_dir, &design, err, sizeof(err)) != 0) {
-        std::fprintf(stderr, "Load failed: %s\n", err);
         return 1;
     }
 
@@ -127,13 +126,11 @@ int main(int argc, char **argv)
     // legality gate compares against, the source of the *true* baseline ("_ori") metrics the
     // score is computed against, and the safe fallback output if the legality gate ever fails.
     if (pd_load_design(testcase_dir, &orig_design, err, sizeof(err)) != 0) {
-        std::fprintf(stderr, "Load failed (orig copy): %s\n", err);
         pd_free_design(&design);
         return 1;
     }
 
     if (lp_build_from_design(&problem, &design, err, sizeof(err)) != 0) {
-        std::fprintf(stderr, "Problem build failed: %s\n", err);
         pd_free_design(&design);
         pd_free_design(&orig_design);
         return 1;
@@ -145,11 +142,9 @@ int main(int argc, char **argv)
         dp_max_delay = std::max(dp_max_delay, br.d_ff_max);
     }
     dp_max_delay = std::min(LpBufferChainDp::kMaxDelay, dp_max_delay + 0.02);
-    std::printf("DP max delay: %.4f\n", dp_max_delay);
 
     if (dp_ss.build(&design, LpBufferDpCorner::SS, dp_max_delay) != 0 ||
         dp_ff.build(&design, LpBufferDpCorner::FF, dp_max_delay) != 0) {
-        std::fprintf(stderr, "DP table build failed\n");
         pd_free_design(&design);
         pd_free_design(&orig_design);
         return 1;
@@ -186,13 +181,8 @@ int main(int argc, char **argv)
 
                 const int n_inserted = insert_decoupling_buffers(&design, err, sizeof(err));
                 if (n_inserted < 0) {
-                    std::fprintf(stderr, "insert_decoupling_buffers failed: %s\n", err);
+                    (void)0;
                 } else if (n_inserted > 0) {
-                    std::printf(
-                        "Pre-inserted %d decoupling buffer(s) on resize-only-residual edges "
-                        "(resize-only WNS_ss=%.6f WNS_ff=%.6f)\n",
-                        n_inserted, pass1_ctx.wns_ss, pass1_ctx.wns_ff);
-
                     // Give the resize search a "free" cell that only the buffers just inserted
                     // are allowed to pick (see LpBranch::allow_zero_cell) - resizing one all the
                     // way down to it and then physically removing it (Phase 3) is electrically
@@ -201,7 +191,6 @@ int main(int argc, char **argv)
                     // unrecoverable cost. Must exist before the lp_build_from_design rebuild
                     // below, since that's what computes each branch's bounds/eligibility.
                     if (pd_add_zero_cell(&design, nullptr, err, sizeof(err)) != 0) {
-                        std::fprintf(stderr, "pd_add_zero_cell failed: %s\n", err);
                         pd_free_design(&design);
                         pd_free_design(&orig_design);
                         return 1;
@@ -209,7 +198,6 @@ int main(int argc, char **argv)
 
                     // Topology changed - rebuild everything that depends on it.
                     if (lp_build_from_design(&problem, &design, err, sizeof(err)) != 0) {
-                        std::fprintf(stderr, "Problem rebuild after insertion failed: %s\n", err);
                         pd_free_design(&design);
                         pd_free_design(&orig_design);
                         return 1;
@@ -222,7 +210,6 @@ int main(int argc, char **argv)
                     dp_max_delay = std::min(LpBufferChainDp::kMaxDelay, dp_max_delay + 0.02);
                     if (dp_ss.build(&design, LpBufferDpCorner::SS, dp_max_delay) != 0 ||
                         dp_ff.build(&design, LpBufferDpCorner::FF, dp_max_delay) != 0) {
-                        std::fprintf(stderr, "DP table rebuild after insertion failed\n");
                         pd_free_design(&design);
                         pd_free_design(&orig_design);
                         return 1;
@@ -230,7 +217,7 @@ int main(int argc, char **argv)
                 }
             }
         } else {
-            std::printf("Insertion candidate pass skipped/failed; proceeding resize-only\n");
+            (void)0;
         }
     }
 
@@ -248,7 +235,7 @@ int main(int argc, char **argv)
     ori.score = lp_compute_score(ori.wns_setup_ss, ori.tns_setup_ss, ori.wns_hold_ff, ori.tns_hold_ff,
                                  ori.area, problem.wns_ss_ori, problem.tns_ss_ori, problem.wns_ff_ori,
                                  problem.tns_ff_ori, problem.area_ori);
-    lp_print_metrics("baseline (ori)", &ori);
+    (void)ori;
 
     std::vector<BranchDpOpts> opts;
     lp_eval_build_branch_opts(&problem, &design, &opts);
@@ -272,7 +259,6 @@ int main(int argc, char **argv)
         // NOTE: `initial` must keep holding the true original-design delays (not lp_init's) -
         // Phase 2 reuses it as a guaranteed-safe second seed for greedy.
         solver_result.lp_init_ok = 1;
-        std::printf("LP init: %s (status=%d)\n", lp_init.solver_name.c_str(), lp_init.status);
         {
             LpEvalCtx lp_ctx;
             if (lp_eval_build_ctx(&problem, &design, &lp_ctx)) {
@@ -287,7 +273,6 @@ int main(int argc, char **argv)
         }
     } else {
         solver_result.lp_init_ok = 0;
-        std::printf("LP init: skipped/failed, using original clock tree delays\n");
     }
     solver_result.lp_init_sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - lp_t0).count();
 // 強制將 LP 初始解轉換為真實圖形，並請出真實裁判計分
@@ -381,14 +366,10 @@ int main(int argc, char **argv)
             std::swap(first_name, second_name);
         }
 
-        std::printf("Running greedy_post_lp from %s seed (budget %.1fs, wall remaining %.1fs)...\n",
-                    first_name, greedy_budget, remaining_wall_sec(wall_deadline));
         if (greedy_budget > 0.1 &&
-            greedy_post_lp(argv[2], testcase_dir, &problem, &design, &dp_ss, &dp_ff, first_seed,
+            greedy_post_lp(nullptr, testcase_dir, &problem, &design, &dp_ss, &dp_ff, first_seed,
                            first_metrics, greedy_budget, wall_deadline, err,
                            sizeof(err)) == 0) {
-            std::printf("Greedy optimization finished successfully.\n");
-
             LpMetrics best_metrics{};
             lp_compute_metrics(&design, &best_metrics);
             best_metrics.score = lp_compute_score(
@@ -400,11 +381,7 @@ int main(int argc, char **argv)
 
             const double remaining_after = remaining_wall_sec(wall_deadline);
             if (remaining_after > 5.0) {
-                std::printf(
-                    "Running second greedy_post_lp from %s seed (budget %.1fs)...\n",
-                    second_name, remaining_after);
-
-                if (greedy_post_lp(argv[2], testcase_dir, &problem, &design, &dp_ss, &dp_ff,
+                if (greedy_post_lp(nullptr, testcase_dir, &problem, &design, &dp_ss, &dp_ff,
                                    second_seed, second_seed_metrics, remaining_after,
                                    wall_deadline, err, sizeof(err)) == 0) {
                     LpMetrics second_round_metrics{};
@@ -414,15 +391,11 @@ int main(int argc, char **argv)
                         second_round_metrics.wns_hold_ff, second_round_metrics.tns_hold_ff,
                         second_round_metrics.area, problem.wns_ss_ori, problem.tns_ss_ori,
                         problem.wns_ff_ori, problem.tns_ff_ori, problem.area_ori);
-                    std::printf("Second greedy result score=%.6f (first was %.6f)\n",
-                                second_round_metrics.score, best_metrics.score);
                     if (second_round_metrics.score > best_metrics.score) {
                         best_metrics = second_round_metrics;
                         best_solution = *second_seed;
                         best_name = second_name;
                     }
-                } else {
-                    std::fprintf(stderr, "Second greedy post-LP failed: %s\n", err);
                 }
             }
 
@@ -432,10 +405,8 @@ int main(int argc, char **argv)
             solver_result.solution.status = 1;
             solver_result.solution.solver_name = best_name;
         } else if (greedy_budget <= 0.1) {
-            std::printf("Greedy skipped: no wall time remaining\n");
             solver_result.solution = lp_init;
         } else {
-            std::fprintf(stderr, "Greedy post-LP failed: %s\n", err);
             solver_result.solution = lp_init;
         }
     } else {
@@ -446,13 +417,8 @@ int main(int argc, char **argv)
     // ---------------------------------------------------------
     // Phase 3: Apply & Output
     // ---------------------------------------------------------
-    std::printf("Solver: %s (status=%d, lp=%.1fs, total_elapsed=%.1fs)\n",
-                solver_result.solution.solver_name.c_str(), solver_result.solution.status,
-                solver_result.lp_init_sec, solver_result.elapsed_sec);
-
     if (apply_solution(&design, &problem, &solver_result.solution, &dp_ss, &dp_ff, err,
                        sizeof(err)) != 0) {
-        std::fprintf(stderr, "Apply failed: %s\n", err);
         lp_problem_free(&problem);
         pd_free_design(&design);
         pd_free_design(&orig_design);
@@ -477,14 +443,11 @@ int main(int argc, char **argv)
                 continue;
             char rm_err[256];
             if (pd_remove_buffer(&design, i, rm_err, sizeof(rm_err)) != 0) {
-                std::fprintf(stderr, "pd_remove_buffer('%s') failed: %s\n", n.name, rm_err);
                 continue;
             }
             n_removed++;
         }
         if (n_removed > 0) {
-            std::printf("Removed %d decoupling buffer(s) that resize shrank to zero area/delay\n",
-                       n_removed);
             pd_annotate_clock(&design);
             pd_compute_timing(&design);
         }
@@ -494,7 +457,7 @@ int main(int argc, char **argv)
     opt.score = lp_compute_score(opt.wns_setup_ss, opt.tns_setup_ss, opt.wns_hold_ff, opt.tns_hold_ff,
                                  opt.area, problem.wns_ss_ori, problem.tns_ss_ori, problem.wns_ff_ori,
                                  problem.tns_ff_ori, problem.area_ori);
-    lp_print_metrics("after optimize", &opt);
+    (void)opt;
 
     // Final safety gate: the contest disqualifies (score 0) any testcase whose output violates
     // the structural rules (existing components preserved & in the same relative order, no
@@ -504,48 +467,14 @@ int main(int argc, char **argv)
     // improvement result is far better than risking disqualification.
     const PdDesign *design_to_write = &design;
     if (pd_check_legality(&orig_design, &design, err, sizeof(err)) != 0) {
-        std::fprintf(stderr,
-                     "LEGALITY CHECK FAILED, falling back to the original design: %s\n", err);
         design_to_write = &orig_design;
-        lp_compute_metrics(&orig_design, &opt);
-        opt.score = lp_compute_score(opt.wns_setup_ss, opt.tns_setup_ss, opt.wns_hold_ff,
-                                     opt.tns_hold_ff, opt.area, problem.wns_ss_ori,
-                                     problem.tns_ss_ori, problem.wns_ff_ori, problem.tns_ff_ori,
-                                     problem.area_ori);
-        lp_print_metrics("after optimize (fallback: legality check failed)", &opt);
     }
 
-    const double wall_elapsed =
-        std::chrono::duration<double>(std::chrono::steady_clock::now() - wall_t0).count();
-
-    if (argc >= 3) {
-        char struct_path[1024];
-        mkdir(argv[2], 0755);
-
-        // 寫入 result.txt
-        if (lp_write_result_txt(argv[2], testcase_dir, &ori, &lp_init_metrics, &opt,
-                                solver_result.solution.solver_name.c_str(),
-                                solver_result.solution.status, total_limit,
-                                greedy_budget_at_start, solver_result.lp_init_sec,
-                                solver_result.lp_init_ok, solver_result.elapsed_sec, wall_elapsed,
-                                solver_result.iterations, solver_result.use_second_best, err,
-                                sizeof(err)) != 0) {
-            std::fprintf(stderr, "Write result.txt failed: %s\n", err);
-        } else {
-            char result_txt[1024];
-            if (pd_join_path(result_txt, sizeof(result_txt), argv[2], "result.txt") == 0)
-                std::printf("Wrote %s\n", result_txt);
-        }
-
-        // 寫入 modified_clk_tree.structure
-        if (pd_join_path(struct_path, sizeof(struct_path), argv[2],
-                         "modified_clk_tree.structure") != 0) {
-            std::fprintf(stderr, "Output path too long\n");
-        } else if (pd_write_structure(design_to_write, struct_path, err, sizeof(err)) != 0) {
-            std::fprintf(stderr, "Write structure failed: %s\n", err);
-        } else {
-            std::printf("Wrote %s\n", struct_path);
-        }
+    if (pd_write_structure(design_to_write, output_path, err, sizeof(err)) != 0) {
+        lp_problem_free(&problem);
+        pd_free_design(&design);
+        pd_free_design(&orig_design);
+        return 1;
     }
 
     lp_problem_free(&problem);

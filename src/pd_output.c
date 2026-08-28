@@ -2,24 +2,28 @@
 
 #include <stdio.h>
 
-static void write_node_recursive(FILE *fp, const PdDesign *d, int node_id)
+static void write_node_recursive(FILE *fp, const PdDesign *d, int node_id, int depth)
 {
     const PdNode *n = &d->nodes[node_id];
     int i;
 
     if (n->kind == PD_NODE_ROOT) {
         fprintf(fp, "Root: %s\n", n->name);
-    } else if (n->kind == PD_NODE_BUF) {
-        fprintf(fp, "[%d] %s (%s)\n", n->level, n->name, n->cell);
-    } else if (n->kind == PD_NODE_FF) {
-        if (n->is_sink)
-            fprintf(fp, "[%d] %s (%s) (SINK)\n", n->level, n->name, n->cell);
-        else
+    } else {
+        for (i = 0; i < depth; i++)
+            fputc('\t', fp);
+        if (n->kind == PD_NODE_BUF) {
             fprintf(fp, "[%d] %s (%s)\n", n->level, n->name, n->cell);
+        } else if (n->kind == PD_NODE_FF) {
+            if (n->is_sink)
+                fprintf(fp, "[%d] %s (%s) (SINK)\n", n->level, n->name, n->cell);
+            else
+                fprintf(fp, "[%d] %s (%s)\n", n->level, n->name, n->cell);
+        }
     }
 
     for (i = 0; i < n->nchildren; i++)
-        write_node_recursive(fp, d, n->children[i]);
+        write_node_recursive(fp, d, n->children[i], depth + 1);
 }
 
 int pd_write_structure(const PdDesign *d, const char *out_path, char *err, size_t err_sz)
@@ -33,7 +37,7 @@ int pd_write_structure(const PdDesign *d, const char *out_path, char *err, size_
     }
 
     if (d->n_nodes > 0)
-        write_node_recursive(fp, d, 0);
+        write_node_recursive(fp, d, 0, 0);
 
     fclose(fp);
     return 0;

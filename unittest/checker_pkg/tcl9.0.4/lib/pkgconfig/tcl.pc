@@ -1,0 +1,16 @@
+# tcl pkg-config source file
+
+prefix=/project/cad/cad05/ICCAD_D/opt/tcl9.0.4
+exec_prefix=/project/cad/cad05/ICCAD_D/opt/tcl9.0.4
+libdir=/project/cad/cad05/ICCAD_D/opt/tcl9.0.4/lib
+includedir=${prefix}/include
+libfile=libtcl9.0.so
+
+Name: Tool Command Language
+Description: Tcl is a powerful, easy-to-learn dynamic programming language, suitable for a wide range of uses.
+URL: https://www.tcl-lang.org/
+Version: 9.0.4
+Requires.private:  zlib >= 1.2.3
+Libs: -L${libdir} -ltcl9.0 -ltclstub
+Libs.private: -ldl -lz  -lpthread -lm
+Cflags: -I${includedir} 

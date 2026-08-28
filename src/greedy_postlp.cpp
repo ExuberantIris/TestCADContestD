@@ -203,7 +203,10 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
 {
     std::printf("greedy_post_lp: entry (V2: High Performance Cache + Zero String Copy)\n");
 
-    if (!pb || !d_const || !lp_init || !lp_init_metrics || !result_dir) {
+    (void)result_dir;
+    (void)testcase_dir;
+
+    if (!pb || !d_const || !lp_init || !lp_init_metrics) {
         if (err && err_sz > 0)
             std::snprintf(err, err_sz, "null arg");
         return -1;
@@ -594,57 +597,10 @@ int greedy_post_lp(const char *result_dir, const char *testcase_dir, const LpPro
     lp_init->d_ss = cur_ss;
     lp_init->d_ff = cur_ff;
 
-    LpMetrics greedy_m{};
-    greedy_m.wns_setup_ss = d->wns_setup_ss;
-    greedy_m.tns_setup_ss = d->tns_setup_ss;
-    greedy_m.wns_hold_ff = d->wns_hold_ff;
-    greedy_m.tns_hold_ff = d->tns_hold_ff;
-    greedy_m.area = d->total_area;
-    greedy_m.score = cur_score;
-
-    char time_label[32];
-    std::snprintf(time_label, sizeof(time_label), "%.1f", time_limit_sec);
-    for (char *p = time_label; *p; ++p)
-        if (*p == '.')
-            *p = 'p';
-
-    char basename[128];
-    std::snprintf(basename, sizeof(basename), "greedy_postlp_bestimpr_t%s.txt", time_label);
-    char path[1024];
-    pd_join_path(path, sizeof(path), result_dir, basename);
-
-    FILE *fp = std::fopen(path, "w");
-    if (fp) {
-        std::fprintf(fp, "greedy_postlp result\n");
-        std::fprintf(fp, "testcase_dir: %s\n", testcase_dir);
-        std::fprintf(fp, "time_limit_sec: %.1f\n", time_limit_sec);
-        std::fprintf(fp, "lp_init_ok: 1\n");
-        std::fprintf(fp, "greedy_elapsed_sec: %.3f\n", elapsed_sec(t0));
-        std::fprintf(fp, "timing_evals: %lld\n", timing_evals);
-        std::fprintf(fp, "solver: greedy_post_lp\n\n");
-
-        std::fprintf(fp, "=== baseline (ori) ===\n");
-        std::fprintf(fp, "SS setup WNS : %.6f  TNS : %.6f\n", pb->wns_ss_ori, pb->tns_ss_ori);
-        std::fprintf(fp, "FF hold  WNS : %.6f  TNS : %.6f\n", pb->wns_ff_ori, pb->tns_ff_ori);
-        std::fprintf(fp, "Total area   : %.6f\n", pb->area_ori);
-        std::fprintf(fp, "Score (a=0.6, b=0.2, g=0.2): %.6f\n\n", 0.0);
-
-        std::fprintf(fp, "=== after LP init ===\n");
-        std::fprintf(fp, "SS setup WNS : %.6f  TNS : %.6f\n", lp_init_metrics->wns_setup_ss,
-                     lp_init_metrics->tns_setup_ss);
-        std::fprintf(fp, "FF hold  WNS : %.6f  TNS : %.6f\n", lp_init_metrics->wns_hold_ff,
-                     lp_init_metrics->tns_hold_ff);
-        std::fprintf(fp, "Total area   : %.6f\n", lp_init_metrics->area);
-        std::fprintf(fp, "Score (a=0.6, b=0.2, g=0.2): %.6f\n\n", lp_init_metrics->score);
-
-        std::fprintf(fp, "=== after greedy ===\n");
-        std::fprintf(fp, "SS setup WNS : %.6f  TNS : %.6f\n", greedy_m.wns_setup_ss,
-                     greedy_m.tns_setup_ss);
-        std::fprintf(fp, "FF hold  WNS : %.6f  TNS : %.6f\n", greedy_m.wns_hold_ff,
-                     greedy_m.tns_hold_ff);
-        std::fprintf(fp, "Total area   : %.6f\n", greedy_m.area);
-        std::fprintf(fp, "Score (a=0.6, b=0.2, g=0.2): %.6f\n", greedy_m.score);
-        std::fclose(fp);
-    }
+    (void)cur_score;
+    (void)time_limit_sec;
+    (void)lp_init_metrics;
+    (void)timing_evals;
+    (void)t0;
     return 0;
 }

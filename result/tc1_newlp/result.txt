@@ -1,0 +1,27 @@
+sa_solver_prime result
+testcase_dir: testcase/testcase1
+time_limit_sec: 600.0
+sa_phase_limit_sec: 570.0
+lp_init_sec: 0.000
+lp_init_ok: 0
+wall_elapsed_sec: 458.902
+sa_elapsed_sec: 458.250
+sa_iterations: 0
+use_second_best: 0
+solver: Greedy_Best_Impr
+solver_status: 1
+
+=== baseline (ori) ===
+SS setup WNS : -0.402300  TNS : -252.448200
+FF hold  WNS : -0.078800  TNS : -0.412100
+Total area   : 1653.160048
+Score (a=0.6, b=0.2, g=0.2): 0.000000
+
+=== after LP init ===
+LP init skipped/failed (no metrics)
+
+=== after optimize ===
+SS setup WNS : -0.297000  TNS : -58.359300
+FF hold  WNS : -0.015100  TNS : -0.015100
+Total area   : 1405.716552
+Score (a=0.6, b=0.2, g=0.2): 1.002626

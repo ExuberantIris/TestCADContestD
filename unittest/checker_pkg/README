@@ -1,0 +1,3 @@
+checker 使用說明：
+1. 請確認 tcl9.0.4 資料夾與 checker 執行檔位於相同目錄路徑下
+2. ./checker <clk_tree.structure 絕對路徑> <modified_clk_tree.structure 絕對路徑> <buf.lib 絕對路徑> <FF_delay.rpt 絕對路徑 > <SS_delay.rpt 絕對路徑>
